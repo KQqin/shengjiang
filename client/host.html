@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>苏区账目风波 · 教师大屏</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/script.css" />
+</head>
+<body class="host-body">
+  <header class="script-topbar">
+    <button type="button" class="btn-back" data-action="back">← 返回课件</button>
+    <span class="topbar-title">教师大屏</span>
+  </header>
+  <div class="host-stage">
+    <div class="host-badge" id="script-title">苏区账目风波</div>
+    <div class="room-code-bar" id="room-bar">
+      房间号：<strong id="room-code">——</strong>
+      <span class="room-meta" id="room-meta">连接中…</span>
+    </div>
+    <div class="host-visual" id="visual">🚪</div>
+    <div class="host-type-label" id="type-label">入场准备</div>
+    <div class="host-phase-name" id="phase-name">阶段 0 · 入场</div>
+    <div class="host-timer hidden" id="timer">08:00</div>
+    <p class="host-hint" id="hint">创建房间，等待 12 名学生加入并抽卡</p>
+    <div class="player-strip" id="player-strip"></div>
+  </div>
+
+  <div class="host-panel">
+    <button type="button" class="btn-ghost" id="btn-prev">← 上一环节</button>
+    <button type="button" class="btn-primary" id="btn-next">下一环节 →</button>
+    <button type="button" class="btn-gold" id="btn-timer">开始计时</button>
+    <button type="button" class="btn-ghost" id="btn-reset-timer">重置</button>
+    <div class="phase-dots" id="phase-dots"></div>
+    <button type="button" class="btn-ghost" id="btn-fullscreen">全屏</button>
+  </div>
+
+  <div class="host-overlay" id="overlay-clues">
+    <div class="overlay-title">📋 公共线索</div>
+    <div id="public-clues"></div>
+    <button type="button" class="btn-ghost" style="margin-top:24px" onclick="closeOverlay('overlay-clues')">关闭</button>
+  </div>
+
+  <div class="host-overlay" id="overlay-vote">
+    <div class="overlay-title">🗳️ 投票汇总 <span id="vote-progress" style="font-size:16px;color:var(--muted)"></span></div>
+    <div class="vote-bars" id="vote-bars"></div>
+    <button type="button" class="btn-ghost" style="margin-top:24px" onclick="closeOverlay('overlay-vote')">关闭</button>
+  </div>
+
+  <div class="host-overlay" id="overlay-reveal">
+    <div class="overlay-title">✨ 真相揭晓</div>
+    <p id="truth-summary" style="font-size:18px;line-height:1.8;margin-bottom:24px;color:var(--muted)"></p>
+    <ul class="truth-list" id="truth-timeline"></ul>
+    <p id="truth-moral" style="margin-top:24px;padding:16px;border-left:3px solid var(--gold);color:var(--gold);line-height:1.8"></p>
+    <button type="button" class="btn-ghost" style="margin-top:24px" onclick="closeOverlay('overlay-reveal')">关闭</button>
+  </div>
+
+  <script src="js/ws-client.js"></script>
+  <script src="js/nav.js"></script>
+  <script src="js/host.js"></script>
+</body>
+</html>

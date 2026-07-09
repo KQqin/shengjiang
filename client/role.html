@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>苏区账目风波 · 我的角色</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/script.css" />
+</head>
+<body class="role-body">
+  <header class="script-topbar">
+    <button type="button" class="btn-back" data-action="back">← 返回课件</button>
+    <span class="topbar-title">学生端</span>
+  </header>
+  <div class="role-scroll">
+  <div class="role-header">
+    <h1>🎭 苏区账目风波</h1>
+    <p id="status-line">加入房间并抽取角色</p>
+  </div>
+
+  <!-- 加入 -->
+  <div class="join-panel" id="join-panel">
+    <input type="text" id="room-code" placeholder="输入 6 位房间号" maxlength="6" inputmode="numeric" />
+    <input type="text" id="nickname" placeholder="你的昵称" maxlength="12" />
+    <button type="button" class="btn-primary btn-block" id="btn-join">加入房间</button>
+  </div>
+
+  <!-- 抽卡 -->
+  <div class="draw-panel hidden" id="draw-panel">
+    <button type="button" class="btn-gold btn-block draw-btn" id="btn-draw">🎴 抽取角色卡</button>
+    <p class="draw-hint">剩余角色：<span id="roles-left">12</span> / 12</p>
+  </div>
+
+  <!-- 角色卡翻转展示 -->
+  <div class="role-card-flip hidden" id="role-reveal">
+    <div class="flip-inner">
+      <p class="flip-label">你的角色</p>
+      <h2 id="reveal-name">——</h2>
+      <p class="meta" id="reveal-meta">——</p>
+      <span class="tag" id="reveal-tag">——</span>
+    </div>
+  </div>
+
+  <div class="role-tabs hidden" id="tabs">
+    <button type="button" class="role-tab active" data-tab="public">公开身份</button>
+    <button type="button" class="role-tab" data-tab="secret">秘密任务</button>
+    <button type="button" class="role-tab" data-tab="clue1">线索 ①</button>
+    <button type="button" class="role-tab" data-tab="clue2">线索 ②</button>
+    <button type="button" class="role-tab" data-tab="vote">投票</button>
+  </div>
+
+  <div class="role-card hidden" id="content"></div>
+
+  <p class="role-notice" id="notice">
+    讨论在线下课堂进行。内容随教师推进环节自动解锁。
+  </p>
+  </div>
+
+  <script src="js/ws-client.js"></script>
+  <script src="js/nav.js"></script>
+  <script src="js/role.js"></script>
+</body>
+</html>

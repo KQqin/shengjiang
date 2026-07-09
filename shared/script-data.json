@@ -1,0 +1,247 @@
+{
+  "id": "suqu-account-dispute",
+  "title": "苏区账目风波",
+  "maxPlayers": 12,
+  "maxConnections": 13,
+  "phases": [
+    { "id": 0, "key": "lobby", "name": "入场", "displayType": "lobby", "durationSec": 180, "showTimer": false, "hostHint": "等待 12 名学生加入并抽取角色卡" },
+    { "id": 1, "key": "incident", "name": "风波起", "displayType": "script", "durationSec": 240, "showTimer": false, "hostHint": "宣读背景：审计发现账目缺口，督查进驻" },
+    { "id": 2, "key": "intro", "name": "自我介绍", "displayType": "discuss", "durationSec": 480, "showTimer": true, "hostHint": "按顺序线下发言，仅公开身份" },
+    { "id": 3, "key": "inquiry1", "name": "第一轮问询", "displayType": "discuss", "durationSec": 480, "showTimer": true, "hostHint": "赵启山主持，线下问询；秘密任务此时可读" },
+    { "id": 4, "key": "search1", "name": "搜证 I", "displayType": "search", "durationSec": 360, "showTimer": true, "hostHint": "学生查看手机线索①，线下讨论自愿公开" },
+    { "id": 5, "key": "discuss", "name": "第二轮公开讨论", "displayType": "discuss", "durationSec": 600, "showTimer": true, "hostHint": "线下自由讨论，大屏仅计时" },
+    { "id": 6, "key": "search2", "name": "搜证 II", "displayType": "search", "durationSec": 300, "showTimer": true, "hostHint": "大屏展示公共线索，学生查看线索②" },
+    { "id": 7, "key": "vote", "name": "限时讨论和投票", "displayType": "vote", "durationSec": 480, "showTimer": true, "hostHint": "线下讨论，学生在手机投票，大屏实时汇总票型" },
+    { "id": 8, "key": "reveal", "name": "揭晓", "displayType": "reveal", "durationSec": 300, "showTimer": false, "hostHint": "展示真相时间线与思政小结" }
+  ],
+  "displayTypes": {
+    "lobby": { "label": "入场准备", "icon": "🚪" },
+    "script": { "label": "读剧本", "icon": "📜" },
+    "search": { "label": "搜证", "icon": "🔍" },
+    "discuss": { "label": "讨论", "icon": "💬" },
+    "vote": { "label": "投票", "icon": "🗳️" },
+    "reveal": { "label": "揭晓", "icon": "✨" }
+  },
+  "incident": {
+    "title": "1933 年春 · 中央苏区某供给站",
+    "body": "上级审计发现账目出现缺口，特派督查组进驻。站内人心惶惶，互相猜疑。请在有限时间内还原真相，杜绝主观定罪。"
+  },
+  "publicClues": [
+    { "id": "P1", "title": "上级审计摘要", "content": "缺口数额与时段已锁定；问题出在站内账物记录，而非外部运输大批损失。" },
+    { "id": "P2", "title": "内部举报信汇总", "content": "多封举报指向「管理混乱」，但均无实锤，疑似互相攻讦所致。" },
+    { "id": "P3", "title": "库房勘查报告", "content": "马卫国带队勘察：无撬痕、无外人潜入、无特务破坏痕迹。" },
+    { "id": "P4", "title": "出入时间表摘要", "content": "黄小根记录：无人于缺口时段私下串通转移物资；温秀宁、周明远往来均在公开区域。" }
+  ],
+  "voteOptions": [
+    { "id": 1, "text": "林大山监守自盗", "correct": false },
+    { "id": 2, "text": "温秀宁、周明远合伙转移物资", "correct": false },
+    { "id": 3, "text": "白区特务 / 外部破坏", "correct": false },
+    { "id": 4, "text": "虚报采购、负责人舞弊", "correct": false },
+    { "id": 5, "text": "苏小禾涂改账本引发连锁反应 + 三人互泼脏水，无实质性贪污", "correct": true }
+  ],
+  "truth": {
+    "summary": "无贪污、无特务、无采购舞弊。苏小禾因害怕批评涂改账本，又因害怕追责向督查编造不利于林大山的证词；陈怀安知悉涂改未上报；林大山认定记账混乱。三人长期不和，互相泼脏水。",
+    "timeline": [
+      "苏小禾涂改账页（以为只是小错）",
+      "库房盘点对不上，林大山与陈怀安、苏小禾互相指责",
+      "苏小禾向督查编造「林大山监守自盗」",
+      "温秀宁、周明远私赠粗粮被误读为转移物资",
+      "督查与中立岗位证词排除外部破坏、采购舞弊"
+    ],
+    "moral": "小问题隐瞒会酿成站级信任危机；就事论事、以证说话，比互相泼脏水更重要。"
+  },
+  "roles": [
+    {
+      "id": "chen-huaian",
+      "name": "陈怀安",
+      "gender": "男",
+      "title": "总账老会计",
+      "tag": "资深财务、严谨古板、恩怨发起者之一",
+      "group": "feud",
+      "publicIntro": "站内资深老会计，做事严谨，对账目要求极严。",
+      "relations": "和林大山长期不和；清楚苏小禾涂改账本，纠结是否上报。",
+      "secretTask": "你知悉苏小禾涂改账本，尚未上报。问询时可抛出库房账目问题，但勿无中生有。",
+      "privateClues": [
+        "你知道苏小禾涂改过账页，尚未上报。",
+        "你曾当众指责林大山「盘点马虎」，有会议记录为证。"
+      ],
+      "introOrder": 4
+    },
+    {
+      "id": "su-xiaohe",
+      "name": "苏小禾",
+      "gender": "女",
+      "title": "青年记账员",
+      "tag": "入职三月新手、胆小怯懦、风波源头",
+      "group": "feud",
+      "publicIntro": "入职三个月的记账员，工作认真但经验不足。",
+      "relations": "害怕陈怀安批评，畏惧林大山追责；曾向督查编造不利于林大山的证词。",
+      "secretTask": "你涂改过账本但不知后果严重。可选择是否在本局后期承认涂改。",
+      "privateClues": [
+        "你涂改的那一页账——你只知道自己在掩盖小错误。",
+        "你曾向督查说「库房可能有问题」，其实并无实据。"
+      ],
+      "introOrder": 5
+    },
+    {
+      "id": "lin-dashan",
+      "name": "林大山",
+      "gender": "男",
+      "title": "库房主管",
+      "tag": "性格急躁、护短、恩怨发起者之一",
+      "group": "feud",
+      "publicIntro": "库房主管，脾气急，护着手下人。",
+      "relations": "认定苏小禾记账出错；反感陈怀安当众指责。",
+      "secretTask": "坚持账本混乱是记账问题，但不得捏造苏小禾私吞物资。",
+      "privateClues": [
+        "盘点差异清单，差异指向记账混乱。",
+        "刘桂兰掌握的你与陈怀安争执的目击侧写。"
+      ],
+      "introOrder": 6
+    },
+    {
+      "id": "wen-xiuning",
+      "name": "温秀宁",
+      "gender": "女",
+      "title": "外勤采购队员",
+      "tag": "对外贸易联络员、温柔细心",
+      "group": "romance",
+      "publicIntro": "外勤采购队员，负责对白区贸易联络。",
+      "relations": "与周明远互生爱慕，私下互赠少量粗粮。",
+      "secretTask": "维护周明远但需如实说明私赠粗粮一事，避免被误读为转移物资。",
+      "privateClues": [
+        "与周明远互赠粗粮的清单（可主动公开洗清嫌疑）。",
+        "采购归途时间线与缺口时段对不上。"
+      ],
+      "introOrder": 7
+    },
+    {
+      "id": "zhou-mingyuan",
+      "name": "周明远",
+      "gender": "男",
+      "title": "库房库管员",
+      "tag": "库房一线保管、踏实肯干",
+      "group": "romance",
+      "publicIntro": "库房一线库管，踏实肯干。",
+      "relations": "爱慕温秀宁，采购归来主动帮忙卸货清点。",
+      "secretTask": "说明与温秀宁往来属私人感情，与物资缺口无关。",
+      "privateClues": [
+        "卸货清点记录，数量与采购单一致。",
+        "温秀宁不在缺口时段经手库房。"
+      ],
+      "introOrder": 8
+    },
+    {
+      "id": "zhao-qishan",
+      "name": "赵启山",
+      "gender": "男",
+      "title": "督查组长",
+      "tag": "上级特派纪检、客观公正",
+      "group": "inspector",
+      "publicIntro": "上级特派督查组长，负责查核本案。",
+      "relations": "主导全场问询，收集证词，杜绝主观定罪。",
+      "secretTask": "主持第一轮问询；若全班≥8票选对，督查结案成功。",
+      "privateClues": [
+        "督查进驻令与问询提纲。",
+        "三人证词矛盾对照摘要（系统生成）。"
+      ],
+      "introOrder": 1
+    },
+    {
+      "id": "wu-qiulan",
+      "name": "吴秋岚",
+      "gender": "女",
+      "title": "督查组员",
+      "tag": "心思细腻、擅长捕捉证词矛盾",
+      "group": "inspector",
+      "publicIntro": "督查组员，善于发现证词漏洞。",
+      "relations": "多次看见苏小禾深夜独自留在账房。",
+      "secretTask": "在讨论中引导还原苏小禾留账房的真实原因。",
+      "privateClues": [
+        "深夜两次看见苏小禾独自留在账房。",
+        "苏小禾证词与陈怀安说法存在时间冲突。"
+      ],
+      "introOrder": 2
+    },
+    {
+      "id": "ma-weiguo",
+      "name": "马卫国",
+      "gender": "男",
+      "title": "督查组员",
+      "tag": "作风硬朗、擅长现场勘查",
+      "group": "inspector",
+      "publicIntro": "督查组员，负责现场勘查。",
+      "relations": "确认库房无外人撬动、无特务潜入。",
+      "secretTask": "用勘查结论排除外部破坏猜想。",
+      "privateClues": [
+        "库房勘察：无撬痕、无外人潜入。",
+        "实物与采购单在「未涂改账目前」基本一致。"
+      ],
+      "introOrder": 3
+    },
+    {
+      "id": "jiang-chengye",
+      "name": "江承业",
+      "gender": "男",
+      "title": "采购负责人",
+      "tag": "贸易主管、原则性极强",
+      "group": "neutral",
+      "publicIntro": "采购负责人，采买票据管理严格。",
+      "relations": "曾拒绝白区商贩拉拢赚差价。",
+      "secretTask": "排除虚报采购、外部勾结牟利。",
+      "privateClues": [
+        "全部采买票据齐全。",
+        "拒绝白区商贩「赚差价」拉拢的记录。"
+      ],
+      "introOrder": 9
+    },
+    {
+      "id": "liu-guilan",
+      "name": "刘桂兰",
+      "gender": "女",
+      "title": "后勤组长",
+      "tag": "全站生活统筹、善于观察人心",
+      "group": "neutral",
+      "publicIntro": "后勤组长，统筹全站生活。",
+      "relations": "察觉站内青年干部焦虑；知三人长期争执。",
+      "secretTask": "提供人际观察，证实无人私下转移物资。",
+      "privateClues": [
+        "三人长期争执、站内青年普遍焦虑。",
+        "未见任何人私下转移物资。"
+      ],
+      "introOrder": 10
+    },
+    {
+      "id": "huang-xiaogen",
+      "name": "黄小根",
+      "gender": "男",
+      "title": "后勤干事",
+      "tag": "勤快跑腿、随处可见的目击者",
+      "group": "neutral",
+      "publicIntro": "后勤干事，负责跑腿与记录。",
+      "relations": "记录全员出入账房、库房时间。",
+      "secretTask": "用出入记录排除私下串通。",
+      "privateClues": [
+        "全员出入账房/库房时间表。",
+        "温、周往来均在公开区域，无隐蔽交接。"
+      ],
+      "introOrder": 11
+    },
+    {
+      "id": "gao-shunping",
+      "name": "高顺平",
+      "gender": "男",
+      "title": "外勤队员",
+      "tag": "钨砂外销专员、对接白区情报",
+      "group": "neutral",
+      "publicIntro": "外勤队员，负责钨砂外销与白区情报。",
+      "relations": "掌握白区特务目标范围。",
+      "secretTask": "说明特务不会在意小额粮油布匹。",
+      "privateClues": [
+        "白区特务目标仅为钨砂、军火、西药。",
+        "小额粮油布匹不在特务任务范围。"
+      ],
+      "introOrder": 12
+    }
+  ]
+}

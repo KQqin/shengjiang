@@ -1,0 +1,25 @@
+/* 与 homepage-mockup 原版一致的字体栈 */
+html,
+body,
+#app,
+uni-app,
+uni-page,
+uni-page-wrapper,
+uni-page-body,
+page {
+  font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+text,
+uni-text {
+  font-family: inherit;
+}

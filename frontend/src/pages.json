@@ -1,0 +1,53 @@
+{
+  "pages": [
+    {
+      "path": "pages/index",
+      "type": "home",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "数智红途 · 智学课堂",
+        "styleIsolation": "shared"
+      }
+    },
+    {
+      "path": "pages/classroom",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "课件播放",
+        "styleIsolation": "shared"
+      }
+    },
+    {
+      "path": "pages/script-host",
+      "style": {
+        "navigationBarTitleText": "教师大屏",
+        "navigationStyle": "custom",
+        "navigationBarBackgroundColor": "#0D0D12"
+      }
+    },
+    {
+      "path": "pages/script-role",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "我的角色",
+        "navigationBarBackgroundColor": "#1A0A0A",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/script-dev",
+      "style": {
+        "navigationBarTitleText": "角色预览 · 开发",
+        "navigationBarBackgroundColor": "#1A0A0A",
+        "navigationBarTextStyle": "white"
+      }
+    }
+  ],
+  "globalStyle": {
+    "backgroundColor": "#F5F6F8",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "数智红途",
+    "navigationBarBackgroundColor": "#FFFFFF"
+  },
+  "subPackages": []
+}

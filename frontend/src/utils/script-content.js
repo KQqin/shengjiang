@@ -1,12 +1,12 @@
-/** 与后端 room.js 一致的环节解锁逻辑 */
+/** 与后端 player_content.py 一致的环节解锁逻辑（6+1 环节） */
 
 export function unlockedSections(phaseIndex) {
   const sections = ['public']
-  if (phaseIndex >= 3) sections.push('secret')
-  if (phaseIndex >= 4) sections.push('clue1')
-  if (phaseIndex >= 6) sections.push('clue2')
-  if (phaseIndex >= 7) sections.push('vote')
-  if (phaseIndex >= 8) sections.push('reveal')
+  if (phaseIndex >= 1) sections.push('script', 'secret', 'allRoles', 'background')
+  if (phaseIndex >= 3) sections.push('clue1')
+  if (phaseIndex >= 4) sections.push('clue2')
+  if (phaseIndex >= 5) sections.push('vote')
+  if (phaseIndex >= 6) sections.push('reveal')
   return sections
 }
 
@@ -18,7 +18,20 @@ export function publicRole(role) {
     title: role.title,
     tag: role.tag,
     publicIntro: role.publicIntro,
+    poster: role.poster,
   }
+}
+
+export function buildAllRoles(scriptData) {
+  return (scriptData?.roles || [])
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      title: r.title,
+      publicIntro: r.publicIntro,
+      introOrder: r.introOrder,
+    }))
+    .sort((a, b) => a.introOrder - b.introOrder)
 }
 
 export function buildPlayerContent(role, phaseIndex, scriptData) {
@@ -28,20 +41,26 @@ export function buildPlayerContent(role, phaseIndex, scriptData) {
   if (unlocked.includes('public')) {
     content.public = publicRole(role)
   }
+  if (unlocked.includes('background')) {
+    content.background = scriptData.background || ''
+  }
+  if (unlocked.includes('script')) {
+    content.personalScript = role.personalScript || []
+  }
   if (unlocked.includes('secret')) {
-    content.secret = {
-      relations: role.relations,
-      secretTask: role.secretTask,
-    }
+    content.secretTasks = role.secretTasks || []
+  }
+  if (unlocked.includes('allRoles')) {
+    content.allRoles = buildAllRoles(scriptData)
   }
   if (unlocked.includes('clue1')) {
-    content.clue1 = role.privateClues[0]
+    content.clue1 = role.privateClues?.[0] || ''
   }
   if (unlocked.includes('clue2')) {
-    content.clue2 = role.privateClues[1]
+    content.clue2 = role.privateClues?.[1] || ''
   }
   if (unlocked.includes('vote')) {
-    content.voteOptions = scriptData.voteOptions.map(({ id, text }) => ({ id, text }))
+    content.voteForm = scriptData.voteForm || { fields: [] }
   }
   if (unlocked.includes('reveal')) {
     content.truth = scriptData.truth

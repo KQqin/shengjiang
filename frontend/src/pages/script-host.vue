@@ -3,6 +3,12 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import * as ws from '@/utils/ws-client'
 import { getSharedUrl } from '@/utils/config'
+import {
+  clearHostSession,
+  isRejoinRecoverableError,
+  loadHostSession,
+  saveHostSession,
+} from '@/utils/script-session'
 
 const courseId = ref('11')
 const scriptData = ref(null)
@@ -16,6 +22,7 @@ const showVote = ref(false)
 const showReveal = ref(false)
 const connStatus = ref('connecting') // connecting | connected | error
 let timerInterval = null
+let pendingHostRejoin = false
 
 const phase = computed(() => scriptData.value?.phases?.[phaseIndex.value])
 const displayType = computed(() => {
@@ -25,7 +32,7 @@ const displayType = computed(() => {
 
 const roomMeta = computed(() => {
   if (connStatus.value === 'error') {
-    return '后端未连接 · 请先启动 script-murder/server（npm start）'
+    return '后端未连接 · 请先启动 server（python main.py）'
   }
   if (!roomState.value) return '连接中…'
   const r = roomState.value
@@ -37,31 +44,20 @@ const playerChips = computed(() => {
   return roomState.value.players
     .filter((p) => !p.isHost)
     .map((p) => ({
-      text: `${p.isBot ? '🤖 ' : ''}${p.nickname}：${p.roleName || '未抽卡'}${p.hasVoted ? ' · 已投' : ''}`,
+      text: `${p.connected === false ? '💤 ' : ''}${p.isBot ? '🤖 ' : ''}${p.nickname}：${p.roleName || '未抽卡'}${p.hasVoted ? ' · 已答' : ''}`,
       hasRole: !!p.roleName,
     }))
 })
 
-const voteRows = computed(() => {
-  if (!scriptData.value) return []
-  const max = roomState.value?.playerCount || 12
-  return scriptData.value.voteOptions.map((o) => {
-    const count = roomState.value?.votes?.[o.id] || 0
-    return {
-      id: o.id,
-      text: o.text,
-      correct: o.correct,
-      count,
-      width: `${(count / max) * 100}%`,
-    }
-  })
-})
+const voteSubmissions = computed(() => roomState.value?.voteSubmissions || [])
 
 const voteProgress = computed(() => {
   if (!roomState.value) return ''
   const max = roomState.value.playerCount || 12
-  return `（${roomState.value.votedCount}/${max} 人已投票，共 ${roomState.value.voteTotal} 票）`
+  return `（${roomState.value.votedCount}/${max} 人已提交）`
 })
+
+const voteReference = computed(() => scriptData.value?.voteForm?.referenceAnswer || null)
 
 const timerText = computed(() => {
   const m = Math.floor(timerSec.value / 60)
@@ -86,10 +82,32 @@ onMounted(async () => {
 
   ws.on('connected', () => {
     connStatus.value = 'connected'
+    const session = loadHostSession()
+    if (session?.playerToken && session?.roomCode) {
+      pendingHostRejoin = true
+      roomCode.value = session.roomCode
+      ws.send('REJOIN_ROOM', {
+        roomCode: session.roomCode,
+        playerToken: session.playerToken,
+      })
+      return
+    }
     ws.send('CREATE_ROOM')
   })
   ws.on('ROOM_CREATED', (msg) => {
     roomCode.value = msg.roomCode
+    pendingHostRejoin = false
+    if (msg.playerToken) {
+      saveHostSession({ roomCode: msg.roomCode, playerToken: msg.playerToken })
+    }
+  })
+  ws.on('JOINED', (msg) => {
+    if (!msg.isHost) return
+    roomCode.value = msg.roomCode
+    pendingHostRejoin = false
+    if (msg.playerToken) {
+      saveHostSession({ roomCode: msg.roomCode, playerToken: msg.playerToken })
+    }
   })
   ws.on('ROOM_STATE', (msg) => {
     roomState.value = msg.room
@@ -98,6 +116,12 @@ onMounted(async () => {
     else updateVotes()
   })
   ws.on('ERROR', (msg) => {
+    if (pendingHostRejoin && isRejoinRecoverableError(msg.message)) {
+      pendingHostRejoin = false
+      clearHostSession()
+      ws.send('CREATE_ROOM')
+      return
+    }
     if (roomState.value) roomState.value._error = msg.message
     if (isDev) devMsg.value = msg.message
   })
@@ -271,12 +295,20 @@ function goDevPreview() {
     </view>
 
     <view v-if="showVote" class="overlay" @click="showVote = false">
-      <view class="overlay-box" @click.stop>
-        <text class="overlay-title">🗳️ 投票汇总 {{ voteProgress }}</text>
-        <view v-for="row in voteRows" :key="row.id" class="vote-row">
-          <text class="vote-label">{{ row.text }}{{ row.correct ? ' ✓' : '' }}</text>
-          <view class="bar-wrap"><view class="bar" :style="{ width: row.width }" /></view>
-          <text class="vote-count">{{ row.count }}</text>
+      <view class="overlay-box vote-overlay" @click.stop>
+        <text class="overlay-title">🗳️ 学生作答汇总 {{ voteProgress }}</text>
+        <scroll-view scroll-y class="vote-scroll">
+          <view v-if="!voteSubmissions.length" class="vote-empty">暂无提交，等待学生填写…</view>
+          <view v-for="item in voteSubmissions" :key="item.playerId" class="vote-card">
+            <text class="vote-card-head">{{ item.nickname }}（{{ item.roleName || '未抽卡' }}）</text>
+            <text class="vote-card-line"><text class="vote-card-label">事件真相：</text>{{ item.truth }}</text>
+            <text class="vote-card-line"><text class="vote-card-label">核心元凶：</text>{{ item.culprit }}</text>
+          </view>
+        </scroll-view>
+        <view v-if="voteReference" class="vote-ref">
+          <text class="vote-ref-title">参考答案（仅教师可见）</text>
+          <text class="vote-ref-line">事件真相：{{ voteReference.truth }}</text>
+          <text class="vote-ref-line">核心元凶：{{ voteReference.culprit }}</text>
         </view>
         <button class="btn ghost" @click="showVote = false">关闭</button>
       </view>
@@ -544,36 +576,72 @@ function goDevPreview() {
   line-height: 1.7;
 }
 
-.vote-row {
+.vote-overlay {
+  max-height: 80vh;
   display: flex;
-  align-items: center;
-  gap: 16rpx;
+  flex-direction: column;
+}
+
+.vote-scroll {
+  flex: 1;
+  max-height: 50vh;
   margin-bottom: 20rpx;
 }
 
-.vote-label {
-  flex: 1;
-  font-size: 24rpx;
-}
-
-.bar-wrap {
-  flex: 1.5;
-  height: 32rpx;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 8rpx;
-  overflow: hidden;
-}
-
-.bar {
-  height: 100%;
-  background: linear-gradient(90deg, #e84855, #ff8a8a);
-}
-
-.vote-count {
-  width: 48rpx;
+.vote-empty {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.45);
   text-align: center;
+  padding: 40rpx 0;
+}
+
+.vote-card {
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  background: rgba(255, 255, 255, 0.06);
+  border-left: 6rpx solid #e84855;
+  border-radius: 12rpx;
+}
+
+.vote-card-head {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  margin-bottom: 12rpx;
+}
+
+.vote-card-line {
+  display: block;
+  font-size: 26rpx;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 8rpx;
+}
+
+.vote-card-label {
   color: #ffd166;
-  font-weight: 700;
+}
+
+.vote-ref {
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+  background: rgba(255, 209, 102, 0.08);
+  border-radius: 12rpx;
+  border: 1px solid rgba(255, 209, 102, 0.2);
+}
+
+.vote-ref-title {
+  display: block;
+  font-size: 24rpx;
+  color: #ffd166;
+  margin-bottom: 8rpx;
+}
+
+.vote-ref-line {
+  display: block;
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.6;
 }
 
 .truth-summary {

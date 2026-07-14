@@ -11,6 +11,7 @@ export default defineConfig({
   },
   plugins: [Uni()],
   server: {
+    host: true,
     port: 5173,
     proxy: {
       '/shared': {

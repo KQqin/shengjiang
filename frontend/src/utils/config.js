@@ -11,7 +11,10 @@ export function getWsUrl() {
   // #ifdef H5
   if (typeof window !== 'undefined') {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    return `${proto}://${window.location.host}`
+    const host = window.location.hostname
+    // 开发模式：前端 5173、后端 3001，局域网访问时用同一 hostname 连后端
+    const port = import.meta.env.DEV ? '3001' : (window.location.port || '80')
+    return `${proto}://${host}:${port}`
   }
   // #endif
 

@@ -3,7 +3,14 @@ import { ref, computed, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import * as ws from '@/utils/ws-client'
 import { getSharedUrl } from '@/utils/config'
-import { buildPlayerContent } from '@/utils/script-content'
+import { buildPlayerContent, buildAllRoles } from '@/utils/script-content'
+import {
+  clearPlayerSession,
+  formatIdentityCode,
+  isRejoinRecoverableError,
+  loadPlayerSession,
+  savePlayerSession,
+} from '@/utils/script-session'
 
 const courseId = ref('11')
 const isPreview = ref(false)
@@ -19,7 +26,9 @@ const drawVisible = ref(false)
 const roleReveal = ref(null)
 const playerContent = ref(null)
 const roomState = ref(null)
-const selectedVote = ref(null)
+const voteTruth = ref('')
+const voteCulprit = ref('')
+const voteSubmitted = ref(false)
 
 const showCharacter = ref(false)
 const showScript = ref(false)
@@ -27,6 +36,26 @@ const clueView = ref('table')
 const focusedClue = ref(null)
 const activeSheet = ref('')
 const myPlayerId = ref('')
+const expandedRoleId = ref('')
+const posterLoadFailed = ref(false)
+const playerToken = ref('')
+const pendingRejoin = ref(false)
+
+const identityCode = computed(() => formatIdentityCode(playerToken.value))
+
+const allRolesList = computed(() => {
+  if (playerContent.value?.allRoles?.length) return playerContent.value.allRoles
+  if (scriptData.value?.roles?.length) return buildAllRoles(scriptData.value)
+  return []
+})
+
+const rolePosterUrl = computed(() => {
+  const poster = roleReveal.value?.poster || playerContent.value?.public?.poster
+  if (!poster) return ''
+  return getSharedUrl(poster)
+})
+
+const scriptReadable = computed(() => unlocked.value.includes('script'))
 
 const unlocked = computed(() => playerContent.value?.unlocked || [])
 
@@ -151,7 +180,7 @@ function initPreviewMode() {
   roomState.value = {
     code: '888888',
     phaseIndex: phaseIdx,
-    publicCluesReleased: phaseIdx >= 6,
+    publicCluesReleased: phaseIdx >= 4,
     sharedClues: [],
     players: [{ id: 'preview-host', nickname: '教师', isHost: true }, ...mockPlayers],
   }
@@ -171,37 +200,85 @@ onMounted(async () => {
     return
   }
 
+  const saved = loadPlayerSession()
+  if (saved?.roomCode) roomCode.value = saved.roomCode
+  if (saved?.nickname) nickname.value = saved.nickname
+
   ws.on('connected', () => {
+    const session = loadPlayerSession()
+    if (session?.playerToken && session?.roomCode) {
+      pendingRejoin.value = true
+      roomCode.value = session.roomCode
+      nickname.value = session.nickname || nickname.value
+      statusLine.value = '正在恢复身份…'
+      ws.send('REJOIN_ROOM', {
+        roomCode: session.roomCode,
+        playerToken: session.playerToken,
+      })
+      return
+    }
     statusLine.value = '已连接服务器，请输入房间号'
   })
   ws.on('JOINED', (msg) => {
     joined.value = true
     myPlayerId.value = msg.playerId
-    statusLine.value = `已加入房间 ${msg.roomCode}`
+    playerToken.value = msg.playerToken || playerToken.value
+    roomCode.value = msg.roomCode
+    savePlayerSession({
+      roomCode: msg.roomCode,
+      playerToken: msg.playerToken,
+      nickname: nickname.value.trim() || '玩家',
+    })
     if (msg.isHost) {
       statusLine.value = '你是教师，请使用教师大屏页面'
+      pendingRejoin.value = false
       return
     }
+    if (msg.rejoined) {
+      statusLine.value = `已恢复房间 ${msg.roomCode}`
+      drawVisible.value = true
+      return
+    }
+    statusLine.value = `已加入房间 ${msg.roomCode}`
     drawVisible.value = true
   })
   ws.on('ROLE_DRAWN', (msg) => {
     hasRole.value = true
     drawVisible.value = false
     roleReveal.value = msg.role
-    showCharacter.value = true
+    if (!pendingRejoin.value) showCharacter.value = true
     statusLine.value = `你是：${msg.role.name}`
+    pendingRejoin.value = false
   })
   ws.on('PLAYER_CONTENT', (msg) => {
     playerContent.value = msg.content
   })
   ws.on('ROOM_STATE', (msg) => {
     roomState.value = msg.room
+    const me = msg.room?.players?.find((p) => p.id === myPlayerId.value)
+    if (me) {
+      voteTruth.value = me.voteTruth || ''
+      voteCulprit.value = me.voteCulprit || ''
+      voteSubmitted.value = !!me.hasVoted
+    }
     if (joined.value && !hasRole.value && msg.room.phaseIndex > 0) {
       drawVisible.value = false
       statusLine.value = '游戏已开始，未能抽卡'
     }
+    if (pendingRejoin.value && !hasRole.value) {
+      pendingRejoin.value = false
+    }
   })
   ws.on('ERROR', (msg) => {
+    if (pendingRejoin.value) {
+      pendingRejoin.value = false
+      joined.value = false
+      hasRole.value = false
+      drawVisible.value = false
+      if (isRejoinRecoverableError(msg.message)) clearPlayerSession()
+      statusLine.value = `恢复失败：${msg.message}，请重新加入`
+      return
+    }
     statusLine.value = `⚠ ${msg.message}`
   })
 
@@ -215,6 +292,7 @@ function joinRoom() {
     statusLine.value = '请输入 6 位房间号'
     return
   }
+  nickname.value = name
   ws.send('JOIN_ROOM', { roomCode: code, nickname: name })
 }
 
@@ -237,6 +315,7 @@ function dismissScript() {
 }
 
 function openScript() {
+  posterLoadFailed.value = false
   showScript.value = true
   showCharacter.value = false
   clueView.value = 'table'
@@ -298,9 +377,24 @@ function closeSheet() {
   activeSheet.value = ''
 }
 
-function castVote(optionId) {
-  selectedVote.value = optionId
-  ws.send('CAST_VOTE', { optionId })
+function submitVote() {
+  const truth = voteTruth.value.trim()
+  const culprit = voteCulprit.value.trim()
+  if (!truth) {
+    statusLine.value = '请填写事件真相'
+    return
+  }
+  if (!culprit) {
+    statusLine.value = '请填写核心元凶'
+    return
+  }
+  ws.send('CAST_VOTE', { truth, culprit })
+  voteSubmitted.value = true
+  statusLine.value = '答案已提交'
+}
+
+function toggleRoleIntro(roleId) {
+  expandedRoleId.value = expandedRoleId.value === roleId ? '' : roleId
 }
 
 function goBack() {
@@ -325,6 +419,7 @@ function isMe(player) {
         <input v-model="roomCode" class="input" placeholder="输入 6 位房间号" maxlength="6" />
         <input v-model="nickname" class="input" placeholder="你的昵称" maxlength="12" />
         <button class="btn primary" @click="joinRoom">加入房间</button>
+        <text v-if="identityCode" class="join-identity">已保存身份码 {{ identityCode }}（刷新可自动恢复）</text>
         <text class="join-status">{{ statusLine }}</text>
       </view>
     </view>
@@ -338,6 +433,7 @@ function isMe(player) {
         <text class="draw-phase">当前环节：{{ phaseName }}</text>
         <button v-if="drawVisible" class="btn gold draw-btn" @click="drawRole">🎴 抽取角色卡</button>
         <text class="draw-hint">剩余角色 {{ roomState?.rolesRemaining ?? 12 }} / 12</text>
+        <text v-if="identityCode" class="draw-identity">身份码 {{ identityCode }}</text>
         <text class="draw-status">{{ statusLine }}</text>
       </view>
     </view>
@@ -351,6 +447,7 @@ function isMe(player) {
           <text class="phase-badge">{{ phaseName }}</text>
         </view>
         <view class="topbar-right">
+          <text v-if="identityCode" class="identity-tag">身份码 {{ identityCode }}</text>
           <text class="room-tag">房间 {{ roomState?.code }}</text>
         </view>
       </view>
@@ -471,7 +568,7 @@ function isMe(player) {
                 </view>
                 <view v-else class="clue-empty">
                   <text class="clue-empty-icon">🔒</text>
-                  <text class="clue-empty-text">私人线索将在搜证环节由教师解锁</text>
+                  <text class="clue-empty-text">私人线索①将在「一轮线索」环节解锁</text>
                 </view>
                 <button class="board-back-btn" @click="backToPublicPool">返回公开卡池</button>
               </view>
@@ -578,74 +675,109 @@ function isMe(player) {
       <view class="char-frame" @click.stop>
         <button class="char-close" @click="dismissCharacter">✕</button>
         <text class="char-label">你的角色</text>
-        <view class="poster-placeholder">
-          <text class="poster-icon">🖼️</text>
-          <text class="poster-hint">人物海报待上传</text>
+        <view class="char-poster">
+          <view class="poster-media">
+            <image
+              v-if="rolePosterUrl && !posterLoadFailed"
+              class="char-poster-img"
+              :src="rolePosterUrl"
+              mode="aspectFit"
+              @error="posterLoadFailed = true"
+            />
+            <view v-else class="poster-placeholder">
+              <text class="poster-icon">🖼️</text>
+              <text class="poster-hint">人物海报加载失败</text>
+            </view>
+          </view>
         </view>
         <view class="poster-info">
           <text class="poster-name">{{ roleReveal.name }}</text>
           <text class="poster-meta">{{ roleReveal.gender }} · {{ roleReveal.title }}</text>
-          <text class="poster-tag">{{ roleReveal.tag }}</text>
         </view>
-        <text class="char-footnote">中央苏区供给站 · {{ roleReveal.title }}</text>
+        <text class="char-footnote">闽浙赣苏区物资总站 · {{ roleReveal.title }}</text>
         <button class="btn primary char-enter" @click="dismissCharacter">进入主界面</button>
       </view>
     </view>
 
-    <!-- 个人剧本：摊开的书 · 双页文本 -->
+    <!-- 个人剧本：纵向卷轴 · 海报 → 简介 → 剧本 → 任务 → 全员简介 -->
     <view v-if="showScript && roleReveal" class="book-overlay" @click="dismissScript">
-      <view class="open-book" @click.stop>
+      <view class="script-book" @click.stop>
         <button class="book-close" @click="dismissScript">✕</button>
+        <scroll-view scroll-y class="script-book-scroll">
+          <!-- 海报 -->
+          <view class="script-poster">
+            <view class="poster-media">
+              <image
+                v-if="rolePosterUrl && !posterLoadFailed"
+                class="script-poster-img"
+                :src="rolePosterUrl"
+                mode="aspectFit"
+                @error="posterLoadFailed = true"
+              />
+              <view v-if="!rolePosterUrl || posterLoadFailed" class="script-poster-placeholder">
+                <text class="poster-icon">🖼️</text>
+                <text class="poster-hint">人物海报加载失败</text>
+              </view>
+            </view>
+            <view class="script-poster-info">
+              <text class="poster-name">{{ roleReveal.name }}</text>
+              <text class="poster-meta">{{ roleReveal.gender }} · {{ roleReveal.title }}</text>
+            </view>
+          </view>
 
-        <view class="book-shell">
-          <view class="book-edge book-edge--left" />
-          <view class="book-page book-page--left">
-            <text class="page-corner page-corner--tl">◈</text>
-            <scroll-view scroll-y class="book-scroll">
-              <view class="script-section">
-                <text class="section-title">📜 个人剧本</text>
-                <view class="script-placeholder">
-                  <text class="script-placeholder-title">完整剧本待上传</text>
-                  <text class="script-placeholder-desc">此处将展示你的专属人物剧本（图文/PDF）。目前可先阅读下方摘要。</text>
-                </view>
-                <view v-if="scriptData?.incident" class="script-block">
-                  <text class="block-title">背景 · {{ scriptData.incident.title }}</text>
-                  <text class="block-p">{{ scriptData.incident.body }}</text>
-                </view>
-                <view v-if="playerContent?.public" class="script-block">
-                  <text class="block-title">公开身份</text>
-                  <text class="block-p">{{ playerContent.public.publicIntro }}</text>
+          <!-- 个人简介 -->
+          <view class="script-block">
+            <text class="block-title">人物简介 · 全员可见</text>
+            <text class="block-p">{{ playerContent?.public?.publicIntro || roleReveal.publicIntro }}</text>
+          </view>
+
+          <!-- 个人剧本 -->
+          <view v-if="scriptReadable && playerContent?.personalScript?.length" class="script-block">
+            <text class="block-title">个人剧本 · 仅自己可见</text>
+            <text
+              v-for="(para, idx) in playerContent.personalScript"
+              :key="`script-${idx}`"
+              class="block-p block-p--para"
+            >{{ para }}</text>
+          </view>
+          <view v-else-if="!scriptReadable" class="script-locked">
+            <text>🔒 个人剧本将在「读剧本」环节解锁</text>
+          </view>
+
+          <!-- 本场任务 -->
+          <view v-if="unlocked.includes('secret') && playerContent?.secretTasks?.length" class="script-block">
+            <text class="block-title">本场任务</text>
+            <view v-for="(task, idx) in playerContent.secretTasks" :key="`task-${idx}`" class="task-item">
+              <text class="task-no">{{ idx + 1 }}</text>
+              <text class="task-text">{{ task }}</text>
+            </view>
+          </view>
+          <view v-else-if="!unlocked.includes('secret')" class="script-locked">
+            <text>🔒 本场任务将在「读剧本」环节解锁</text>
+          </view>
+
+          <!-- 全员简介 -->
+          <view v-if="unlocked.includes('allRoles') && allRolesList.length" class="script-block">
+            <text class="block-title">全员简介 · 可随时查阅</text>
+            <text class="block-hint">按自我介绍顺序排列，点击展开</text>
+            <view
+              v-for="r in allRolesList"
+              :key="r.id"
+              class="role-intro-card"
+              :class="{ expanded: expandedRoleId === r.id, me: r.id === roleReveal.id }"
+            >
+              <view class="role-intro-head" @click="toggleRoleIntro(r.id)">
+                <text class="role-intro-order">{{ r.introOrder }}</text>
+                <view class="role-intro-meta">
+                  <text class="role-intro-name">{{ r.name }} · {{ r.title }}</text>
+                  <text class="role-intro-toggle">{{ expandedRoleId === r.id ? '收起' : '展开' }}</text>
                 </view>
               </view>
-            </scroll-view>
-            <text class="page-num">— i —</text>
+              <text v-if="expandedRoleId === r.id" class="role-intro-body">{{ r.publicIntro }}</text>
+            </view>
           </view>
-
-          <view class="book-gutter">
-            <view class="gutter-line" />
-          </view>
-
-          <view class="book-page book-page--right">
-            <text class="page-corner page-corner--tr">◈</text>
-            <scroll-view scroll-y class="book-scroll">
-              <view class="script-section">
-                <view v-if="unlocked.includes('secret') && playerContent?.secret" class="script-block">
-                  <text class="block-title">人物关系</text>
-                  <text class="block-p">{{ playerContent.secret.relations }}</text>
-                  <text class="block-title">秘密任务</text>
-                  <text class="block-p">{{ playerContent.secret.secretTask }}</text>
-                </view>
-                <view v-else class="script-locked">
-                  <text>🔒 秘密任务将在「第一轮问询」环节解锁</text>
-                </view>
-              </view>
-            </scroll-view>
-            <text class="page-num">— ii —</text>
-          </view>
-          <view class="book-edge book-edge--right" />
-        </view>
-
-        <text class="book-tip">左右页均可滑动阅读 · 点击外侧关闭</text>
+        </scroll-view>
+        <text class="book-tip">上下滑动阅读 · 点击外侧关闭</text>
       </view>
     </view>
 
@@ -661,13 +793,31 @@ function isMe(player) {
 
         <scroll-view scroll-y class="sheet-body">
           <template v-if="activeSheet === 'vote'">
-            <text class="sheet-block-title">选择你认为的真相</text>
-            <button
-              v-for="opt in playerContent?.voteOptions || []"
-              :key="opt.id"
-              :class="['vote-option', selectedVote === opt.id ? 'selected' : '']"
-              @click="castVote(opt.id)"
-            >{{ opt.text }}</button>
+            <text class="sheet-block-title">填写你的推理结论</text>
+            <text class="sheet-muted">请根据剧本与线索，用简短文字作答；提交后教师端可实时查看。</text>
+            <view
+              v-for="field in playerContent?.voteForm?.fields || []"
+              :key="field.key"
+              class="vote-field"
+            >
+              <text class="vote-label">{{ field.label }}</text>
+              <textarea
+                v-if="field.key === 'truth'"
+                v-model="voteTruth"
+                class="vote-input vote-textarea"
+                :placeholder="field.placeholder"
+                maxlength="200"
+              />
+              <input
+                v-else
+                v-model="voteCulprit"
+                class="vote-input"
+                :placeholder="field.placeholder"
+                maxlength="20"
+              />
+            </view>
+            <button class="btn primary sheet-btn" @click="submitVote">提交答案</button>
+            <text v-if="voteSubmitted" class="sheet-tip">已提交，可修改后再次点击提交更新</text>
           </template>
 
           <template v-else>
@@ -772,6 +922,16 @@ function isMe(player) {
   color: rgba(245, 230, 208, 0.45);
 }
 
+.join-identity,
+.draw-identity {
+  display: block;
+  margin-top: 12rpx;
+  text-align: center;
+  font-size: 22rpx;
+  color: rgba(212, 165, 116, 0.75);
+  letter-spacing: 2rpx;
+}
+
 .draw-card {
   margin-top: 120rpx;
   padding: 48rpx 32rpx;
@@ -856,6 +1016,19 @@ function isMe(player) {
 .room-tag {
   font-size: 22rpx;
   color: rgba(245, 230, 208, 0.45);
+}
+
+.topbar-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4rpx;
+}
+
+.identity-tag {
+  font-size: 20rpx;
+  color: #d4a574;
+  letter-spacing: 1rpx;
 }
 
 .table-area {
@@ -1575,7 +1748,7 @@ function isMe(player) {
   padding: 20rpx;
 }
 
-/* ===== 摊开的书（剧本） ===== */
+/* ===== 剧本书（纵向卷轴） ===== */
 .book-overlay {
   position: fixed;
   inset: 0;
@@ -1585,6 +1758,177 @@ function isMe(player) {
   align-items: center;
   justify-content: center;
   padding: 24rpx;
+}
+
+.script-book {
+  width: 100%;
+  max-width: 720px;
+  max-height: 88vh;
+  position: relative;
+  border-radius: 20rpx;
+  background: linear-gradient(180deg, #faf3e4 0%, #f0e2c8 55%, #e6d4b0 100%);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55);
+  color: #3d2914;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.script-book-scroll {
+  flex: 1;
+  max-height: calc(88vh - 80rpx);
+  padding: 48rpx 28rpx 24rpx;
+  box-sizing: border-box;
+}
+
+.script-poster {
+  margin-bottom: 28rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+  background: rgba(61, 41, 20, 0.08);
+  border: 2rpx solid rgba(139, 90, 43, 0.25);
+}
+
+.poster-media {
+  height: 320rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16rpx 24rpx;
+  background: #2a2018;
+  box-sizing: border-box;
+}
+
+.script-poster-img,
+.char-poster-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.char-poster {
+  width: 100%;
+  border-radius: 8rpx;
+  overflow: hidden;
+  border: 2rpx solid rgba(139, 90, 43, 0.25);
+  background: #2a2018;
+}
+
+.script-poster-placeholder,
+.poster-placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 200rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+}
+
+.script-poster-info {
+  padding: 16rpx 24rpx 20rpx;
+  text-align: center;
+}
+
+.block-p--para {
+  display: block;
+  margin-bottom: 20rpx;
+  line-height: 1.75;
+  text-align: justify;
+  word-break: break-word;
+}
+
+.block-hint {
+  display: block;
+  margin: 8rpx 0 16rpx;
+  font-size: 22rpx;
+  color: rgba(92, 64, 51, 0.55);
+}
+
+.task-item {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+  align-items: flex-start;
+}
+
+.task-no {
+  flex-shrink: 0;
+  width: 36rpx;
+  height: 36rpx;
+  line-height: 36rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: rgba(139, 58, 58, 0.15);
+  color: #8b3a3a;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.task-text {
+  flex: 1;
+  font-size: 26rpx;
+  line-height: 1.65;
+}
+
+.role-intro-card {
+  margin-bottom: 12rpx;
+  border-radius: 12rpx;
+  border: 1rpx solid rgba(139, 90, 43, 0.2);
+  background: rgba(255, 255, 255, 0.25);
+  overflow: hidden;
+}
+
+.role-intro-card.me {
+  border-color: rgba(139, 58, 58, 0.35);
+  background: rgba(139, 58, 58, 0.06);
+}
+
+.role-intro-head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 16rpx 18rpx;
+}
+
+.role-intro-order {
+  width: 40rpx;
+  height: 40rpx;
+  line-height: 40rpx;
+  text-align: center;
+  border-radius: 8rpx;
+  background: rgba(61, 41, 20, 0.1);
+  font-size: 22rpx;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.role-intro-meta {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.role-intro-name {
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.role-intro-toggle {
+  font-size: 22rpx;
+  color: #8b5a2b;
+  flex-shrink: 0;
+}
+
+.role-intro-body {
+  display: block;
+  padding: 0 18rpx 18rpx 70rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: rgba(61, 41, 20, 0.88);
 }
 
 .open-book {
@@ -1696,18 +2040,6 @@ function isMe(player) {
   margin-bottom: 16rpx;
 }
 
-.poster-placeholder {
-  width: 100%;
-  height: 240rpx;
-  border-radius: 8rpx;
-  border: 2rpx dashed rgba(139, 90, 43, 0.35);
-  background: rgba(255, 255, 255, 0.35);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
 .poster-icon {
   font-size: 56rpx;
   opacity: 0.45;
@@ -1737,18 +2069,6 @@ function isMe(player) {
   margin-top: 8rpx;
   font-size: 24rpx;
   color: #6b4423;
-}
-
-.poster-tag {
-  display: inline-block;
-  margin-top: 12rpx;
-  padding: 6rpx 14rpx;
-  font-size: 20rpx;
-  line-height: 1.5;
-  border-radius: 20rpx;
-  background: rgba(139, 58, 58, 0.12);
-  color: #8b3a3a;
-  text-align: left;
 }
 
 .page-footnote {
@@ -1973,23 +2293,32 @@ function isMe(player) {
   color: #d4a574;
 }
 
-.vote-option {
+.vote-field {
+  margin-bottom: 24rpx;
+}
+
+.vote-label {
+  display: block;
+  font-size: 26rpx;
+  color: #d4a574;
+  margin-bottom: 12rpx;
+}
+
+.vote-input {
   display: block;
   width: 100%;
-  text-align: left;
-  padding: 24rpx;
-  margin-bottom: 12rpx;
+  box-sizing: border-box;
+  padding: 20rpx 24rpx;
   border-radius: 12rpx;
-  border: 1px solid rgba(212, 165, 116, 0.2);
-  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(212, 165, 116, 0.25);
+  background: rgba(0, 0, 0, 0.35);
   color: #f5e6d0;
   font-size: 26rpx;
   line-height: 1.5;
 }
 
-.vote-option.selected {
-  border-color: #8b3a3a;
-  background: rgba(139, 58, 58, 0.25);
+.vote-textarea {
+  min-height: 160rpx;
 }
 
 .sheet-btn {

@@ -214,8 +214,8 @@ function isGameNode(i) {
             <view class="game-card game-card--script">
               <text class="game-tag">互动游戏 ②</text>
               <view class="game-card-h3">🎭 红色剧本杀</view>
-              <view class="game-card-p">《苏区账目风波》· 13 人联机（1 教师 + 12 学生），抽卡、私人线索、投票汇总。</view>
-              <view class="game-card-hint">请先启动服务：script-murder/server → npm start</view>
+              <view class="game-card-p">《苏区账目风波》· 13 人联机（1 教师 + 12 学生），读剧本、线索搜证、投票汇总。</view>
+              <view class="game-card-hint">请先启动后端：server 目录 → python main.py</view>
               <view class="game-btn-row">
                 <button type="button" class="game-btn" @click="goHost">教师大屏</button>
                 <button type="button" class="game-btn game-btn--pink" @click="goRole">学生加入</button>

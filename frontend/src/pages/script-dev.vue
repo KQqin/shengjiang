@@ -10,7 +10,8 @@ const currentTab = ref('public')
 
 const tabs = [
   { key: 'public', label: '公开身份' },
-  { key: 'secret', label: '秘密任务' },
+  { key: 'script', label: '个人剧本' },
+  { key: 'secret', label: '本场任务' },
   { key: 'clue1', label: '线索 ①' },
   { key: 'clue2', label: '线索 ②' },
   { key: 'vote', label: '投票' },
@@ -36,8 +37,11 @@ const contentHtml = computed(() => {
   if (currentTab.value === 'public' && u.includes('public')) {
     return { type: 'public', data: c.public }
   }
+  if (currentTab.value === 'script' && u.includes('script')) {
+    return { type: 'script', paragraphs: c.personalScript || [] }
+  }
   if (currentTab.value === 'secret' && u.includes('secret')) {
-    return { type: 'secret', data: c.secret }
+    return { type: 'secret', tasks: c.secretTasks || [] }
   }
   if (currentTab.value === 'clue1' && u.includes('clue1')) {
     return { type: 'clue', title: '私人线索 ①', text: c.clue1 }
@@ -46,7 +50,7 @@ const contentHtml = computed(() => {
     return { type: 'clue', title: '私人线索 ②', text: c.clue2 }
   }
   if (currentTab.value === 'vote' && u.includes('vote')) {
-    return { type: 'vote', options: c.voteOptions }
+    return { type: 'vote', fields: c.voteForm?.fields || [] }
   }
   if (currentTab.value === 'reveal' && u.includes('reveal')) {
     return { type: 'reveal', data: c.truth }
@@ -129,10 +133,14 @@ function goBack() {
         <text class="p"><text class="bold">公开介绍：</text>{{ contentHtml.data.publicIntro }}</text>
       </template>
 
+      <template v-else-if="contentHtml.type === 'script'">
+        <text class="h2">个人剧本</text>
+        <text v-for="(para, i) in contentHtml.paragraphs" :key="i" class="p">{{ para }}</text>
+      </template>
+
       <template v-else-if="contentHtml.type === 'secret'">
-        <text class="h2">秘密任务</text>
-        <text class="p"><text class="bold">人物关系：</text>{{ contentHtml.data.relations }}</text>
-        <text class="p"><text class="bold">你的任务：</text>{{ contentHtml.data.secretTask }}</text>
+        <text class="h2">本场任务</text>
+        <text v-for="(task, i) in contentHtml.tasks" :key="i" class="p">{{ i + 1 }}. {{ task }}</text>
       </template>
 
       <template v-else-if="contentHtml.type === 'clue'">
@@ -141,12 +149,11 @@ function goBack() {
       </template>
 
       <template v-else-if="contentHtml.type === 'vote'">
-        <text class="h2">选择答案</text>
-        <view
-          v-for="opt in contentHtml.options"
-          :key="opt.id"
-          class="vote-btn"
-        >{{ opt.text }}</view>
+        <text class="h2">填写推理结论</text>
+        <view v-for="field in contentHtml.fields" :key="field.key" class="vote-field-preview">
+          <text class="vote-field-label">{{ field.label }}</text>
+          <view class="vote-field-placeholder">{{ field.placeholder }}</view>
+        </view>
       </template>
 
       <template v-else-if="contentHtml.type === 'reveal'">
@@ -291,18 +298,26 @@ function goBack() {
   margin-bottom: 16rpx;
 }
 
-.bold { font-weight: 700; color: #fff; }
-
-.vote-btn {
-  display: block;
-  padding: 24rpx;
-  margin-bottom: 12rpx;
-  border-radius: 16rpx;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 26rpx;
-  line-height: 1.5;
+.vote-field-preview {
+  margin-bottom: 20rpx;
 }
+
+.vote-field-label {
+  display: block;
+  font-size: 26rpx;
+  color: #ffd166;
+  margin-bottom: 8rpx;
+}
+
+.vote-field-placeholder {
+  padding: 20rpx;
+  border-radius: 12rpx;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 24rpx;
+}
+
+.bold { font-weight: 700; color: #fff; }
 
 .timeline-item {
   display: block;

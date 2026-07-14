@@ -2,7 +2,7 @@
 
 本目录为《苏区账目风波》剧本杀及智学课堂的 **uni-app H5 前端**，供后端同学联调与后续扩展。
 
-> 后端仓库同级的 `server/`、`shared/` 为 Node.js WebSocket 服务与剧本数据。  
+> 后端仓库同级的 `server/`（Python FastAPI）、`shared/`（剧本数据）。  
 > 旧版静态页 `client/` 已逐步废弃，请以本目录为准。
 
 ---
@@ -55,10 +55,9 @@ frontend/
 
 ```bash
 cd server
-npm install
-# 开发者模式（虚拟玩家、填充房间等）
-set DEV_MODE=1    # Windows
-npm start
+pip install -r requirements.txt
+set DEV_MODE=1    # Windows，开发者工具
+python main.py
 # → http://localhost:3001
 ```
 
@@ -140,6 +139,7 @@ http://localhost:5173/#/pages/script-role?preview=1&role=5&phase=6
 
 | type | 发送方 | 说明 |
 |------|--------|------|
+| `REJOIN_ROOM` | 教师/学生 | `{ roomCode, playerToken }` 断线后恢复身份 |
 | `SHARE_CLUE` | 学生 | `{ clueKey: "clue1" \| "clue2" }` 将私人线索推到公开卡池 |
 
 ### 服务端 → 客户端（ROOM_STATE 扩展字段）
@@ -163,7 +163,7 @@ http://localhost:5173/#/pages/script-role?preview=1&role=5&phase=6
 }
 ```
 
-`publicCluesReleased` 在 `phaseIndex >= 6` 时为 `true`，前端才渲染 `script-data.json` 中的 `publicClues`。
+`publicCluesReleased` 在 `phaseIndex >= 4`（二轮线索）时为 `true`，前端才渲染 `publicClues`。
 
 ---
 
@@ -178,7 +178,7 @@ shared/
     ├── public-clues/          # P1.jpg ~ P4.jpg
     └── roles/
         └── {role-id}/
-            ├── poster.jpg     # 人物海报
+            ├── poster.png     # 人物海报
             ├── clue-1.jpg     # 私人线索①图
             ├── clue-2.jpg
             └── script.pdf     # 个人剧本
@@ -188,7 +188,7 @@ shared/
 
 ```js
 // utils/config.js
-getSharedUrl('assets/suqu-account-dispute/roles/zhao-qishan/poster.jpg')
+getSharedUrl('assets/suqu-account-dispute/roles/zhao-qishan/poster.png')
 // → /shared/assets/...（由 server.js 静态托管）
 ```
 
@@ -201,8 +201,8 @@ getSharedUrl('assets/suqu-account-dispute/roles/zhao-qishan/poster.jpg')
 - [ ] 确认 `SHARE_CLUE` 与 `sharedClues` 广播已实现（见 `server/room.js`）
 - [ ] `shared/script-data.json` 为唯一数据源，改字段需同步 `frontend/src/utils/script-content.js`
 - [ ] 素材目录 `shared/assets/` 与 JSON 路径字段
-- [ ] 生产部署：`npm run build` 后由 `server.js` 托管 `frontend/dist/build/h5`
-- [ ] 可选：断线重连保留角色、房间持久化、教师素材上传接口
+- [x] 断线重连：`REJOIN_ROOM` + `playerToken`（`script-session.js` 本地缓存）
+- [ ] 生产部署：`npm run build` 后由 Python 后端托管 `frontend/dist/build/h5`
 
 ---
 
@@ -226,7 +226,7 @@ VITE_WS_URL=wss://api.example.com
 
 ## 联系方式与联调注意
 
-1. 必须先 `npm start` 后端，再开前端；否则教师端无房间号、学生端 WebSocket 失败
+1. 必须先启动 Python 后端（`python main.py`），再开前端；否则教师端无房间号、学生端 WebSocket 失败
 2. 修改 `shared/script-data.json` 后 **重启后端**
 3. 课堂局域网：学生手机访问 `http://教师IP:3001`（生产构建）或 `http://教师IP:5173`（开发）
 4. 旧版 `client/host.html`、`client/role.html` 不再维护，联调以本前端为准

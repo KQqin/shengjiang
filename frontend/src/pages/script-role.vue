@@ -498,7 +498,15 @@ function leaveRoom() {
 }
 
 function goBack() {
-  uni.navigateBack()
+  if (joined.value && !isPreview.value) {
+    ws.disconnect()
+  }
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack()
+    return
+  }
+  uni.redirectTo({ url: `/pages/classroom?course=${courseId.value}` })
 }
 
 function isMe(player) {
@@ -542,6 +550,7 @@ function isMe(player) {
       <view v-if="isPreview" class="preview-badge">预览模式 · 无需联机</view>
       <view class="topbar">
         <view class="topbar-left">
+          <text class="topbar-back" @click="goBack">← 返回</text>
           <text class="script-title">{{ scriptData?.title || '苏区账目风波' }}</text>
           <text class="phase-badge">{{ phaseName }}</text>
         </view>
@@ -1100,6 +1109,13 @@ function isMe(player) {
   padding: 20rpx 24rpx 12rpx;
   background: rgba(0, 0, 0, 0.45);
   border-bottom: 1px solid rgba(212, 165, 116, 0.15);
+}
+
+.topbar-back {
+  display: block;
+  margin-bottom: 8rpx;
+  font-size: 24rpx;
+  color: rgba(245, 230, 208, 0.65);
 }
 
 .script-title {

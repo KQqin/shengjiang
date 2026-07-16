@@ -254,9 +254,9 @@ function applyPhase(i) {
   const p = scriptData.value.phases[i]
   timerSec.value = p.durationSec
   stopTimer()
-  showClues.value = p.key === 'search2'
-  showVote.value = p.key === 'vote'
-  showReveal.value = p.key === 'reveal'
+  showClues.value = false
+  showVote.value = false
+  showReveal.value = false
 }
 
 function updateVotes() {
@@ -288,6 +288,18 @@ function resetTimer() {
   timerSec.value = scriptData.value.phases[phaseIndex.value].durationSec
 }
 
+function navigateBackToCourse() {
+  showClues.value = false
+  showVote.value = false
+  showReveal.value = false
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack()
+    return
+  }
+  uni.redirectTo({ url: `/pages/classroom?course=${courseId.value}` })
+}
+
 function goBack() {
   leavingIntentionally = true
   if (!gameStarted.value) {
@@ -296,7 +308,8 @@ function goBack() {
     saveHostSession(hostVisitSession)
     clearHostLobbySession()
   }
-  uni.navigateBack()
+  ws.disconnect()
+  navigateBackToCourse()
 }
 
 function endGame() {
@@ -388,6 +401,9 @@ function goDevPreview() {
         class="btn fill"
         @click="autoFillRoster"
       >自动补齐 {{ fillableSlots }} 人</button>
+      <button v-if="phase?.key === 'search2'" class="btn ghost" @click="showClues = true">查看公共线索</button>
+      <button v-if="phase?.key === 'vote'" class="btn ghost" @click="showVote = true">查看作答汇总</button>
+      <button v-if="phase?.key === 'reveal'" class="btn ghost" @click="showReveal = true">真相揭晓</button>
       <button v-if="gameStarted" type="button" class="btn danger" @click="endGame">结束游戏</button>
       <view class="dots">
         <view
@@ -466,7 +482,7 @@ function goDevPreview() {
   position: fixed;
   top: 20rpx;
   left: 20rpx;
-  z-index: 100;
+  z-index: 300;
   padding: 10rpx 24rpx;
   font-size: 24rpx;
   background: rgba(0, 0, 0, 0.55);
@@ -763,6 +779,7 @@ function goDevPreview() {
   color: #ffd166;
 }
 
+.truth-summary {
   display: block;
   font-size: 28rpx;
   color: rgba(255, 255, 255, 0.6);

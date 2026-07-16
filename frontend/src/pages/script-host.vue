@@ -54,7 +54,7 @@ const playerChips = computed(() => {
   return roomState.value.players
     .filter((p) => !p.isHost)
     .map((p) => ({
-      text: `${p.connected === false ? '💤 ' : ''}${p.isBot ? '🤖 ' : ''}${p.nickname}：${p.roleName || '未抽卡'}${p.hasVoted ? ' · 已答' : ''}`,
+      text: `${p.connected === false ? '💤 ' : ''}${p.isBot ? '补位 ' : ''}${p.nickname}：${p.roleName || '未抽卡'}${p.hasVoted ? ' · 已答' : ''}`,
       hasRole: !!p.roleName,
     }))
 })
@@ -67,7 +67,14 @@ const voteProgress = computed(() => {
   return `（${roomState.value.votedCount}/${max} 人已提交）`
 })
 
-const voteReference = computed(() => scriptData.value?.voteForm?.referenceAnswer || null)
+const fillableSlots = computed(() => {
+  if (!roomState.value || gameStarted.value) return 0
+  const max = roomState.value.maxPlayers || 12
+  const total = roomState.value.playerCount ?? 0
+  return Math.max(0, max - total)
+})
+
+const hostMsg = ref('')
 
 const timerText = computed(() => {
   const m = Math.floor(timerSec.value / 60)
@@ -204,6 +211,11 @@ onMounted(async () => {
     else if (msg.action === 'DEV_AUTO_VOTE') devMsg.value = `已模拟 ${msg.voted} 票`
     else if (msg.action === 'DEV_CLEAR_BOTS') devMsg.value = `已移除 ${msg.removed} 名测试玩家`
   })
+  ws.on('HOST_OK', (msg) => {
+    if (msg.action === 'AUTO_FILL_ROSTER') {
+      hostMsg.value = `已补位 ${msg.added} 人 · 抽卡 ${msg.drawn} · 公开线索 ${msg.cluesShared || 0} 条`
+    }
+  })
   ws.on('error', () => {
     if (!roomState.value) connStatus.value = 'error'
   })
@@ -300,7 +312,14 @@ function nextPhase() {
   ws.send('NEXT_PHASE')
 }
 
-const isDev = import.meta.env.DEV
+function autoFillRoster() {
+  if (!fillableSlots.value) return
+  hostMsg.value = '正在补位…'
+  ws.send('AUTO_FILL_ROSTER')
+}
+
+/** 仅当 .env 显式设置 VITE_DEV_TOOLS=1 时显示（生产默认关闭） */
+const isDev = import.meta.env.VITE_DEV_TOOLS === '1'
 const devMsg = ref('')
 
 function devFill() {
@@ -364,6 +383,11 @@ function goDevPreview() {
       <button class="btn primary" @click="nextPhase">下一环节 →</button>
       <button class="btn gold" @click="startTimer">{{ timerRunning ? '暂停' : '开始计时' }}</button>
       <button class="btn ghost" @click="resetTimer">重置</button>
+      <button
+        v-if="fillableSlots > 0"
+        class="btn fill"
+        @click="autoFillRoster"
+      >自动补齐 {{ fillableSlots }} 人</button>
       <button v-if="gameStarted" type="button" class="btn danger" @click="endGame">结束游戏</button>
       <view class="dots">
         <view
@@ -372,6 +396,10 @@ function goDevPreview() {
           :class="['dot', i === phaseIndex ? 'active' : '', i < phaseIndex ? 'done' : '']"
         />
       </view>
+    </view>
+
+    <view v-if="hostMsg" class="host-msg-bar">
+      <text class="host-msg-text">{{ hostMsg }}</text>
     </view>
 
     <view v-if="isDev" class="dev-panel">
@@ -409,11 +437,6 @@ function goDevPreview() {
             <text class="vote-card-line"><text class="vote-card-label">核心元凶：</text>{{ item.culprit }}</text>
           </view>
         </scroll-view>
-        <view v-if="voteReference" class="vote-ref">
-          <text class="vote-ref-title">参考答案（仅教师可见）</text>
-          <text class="vote-ref-line">事件真相：{{ voteReference.truth }}</text>
-          <text class="vote-ref-line">核心元凶：{{ voteReference.culprit }}</text>
-        </view>
         <button class="btn ghost" @click="showVote = false">关闭</button>
       </view>
     </view>
@@ -620,6 +643,19 @@ function goDevPreview() {
 .btn.gold { background: #ffd166; color: #1a1a1a; }
 .btn.danger { background: #8b2e2e; color: #fff; border: 1px solid rgba(255, 120, 120, 0.35); }
 .btn.ghost { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.btn.fill { background: rgba(100, 180, 255, 0.22); color: #9fd4ff; border: 1px solid rgba(100, 180, 255, 0.35); }
+
+.host-msg-bar {
+  padding: 12rpx 24rpx 0;
+  background: #16161f;
+}
+
+.host-msg-text {
+  display: block;
+  font-size: 22rpx;
+  color: rgba(159, 212, 255, 0.85);
+  text-align: center;
+}
 
 .dots {
   display: flex;
@@ -727,29 +763,6 @@ function goDevPreview() {
   color: #ffd166;
 }
 
-.vote-ref {
-  padding: 20rpx;
-  margin-bottom: 20rpx;
-  background: rgba(255, 209, 102, 0.08);
-  border-radius: 12rpx;
-  border: 1px solid rgba(255, 209, 102, 0.2);
-}
-
-.vote-ref-title {
-  display: block;
-  font-size: 24rpx;
-  color: #ffd166;
-  margin-bottom: 8rpx;
-}
-
-.vote-ref-line {
-  display: block;
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.7);
-  line-height: 1.6;
-}
-
-.truth-summary {
   display: block;
   font-size: 28rpx;
   color: rgba(255, 255, 255, 0.6);

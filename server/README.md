@@ -14,7 +14,7 @@ python main.py
 - 剧本数据：http://localhost:3001/shared/script-data.json
 - WebSocket：ws://localhost:3001
 
-开发者模式默认开启（`DEV_MODE=1`），支持教师端 `DEV_*` 虚拟玩家。
+开发者模式默认关闭（`DEV_MODE=0`）。本地调试时可设 `DEV_MODE=1` 启用教师端 `DEV_*` 虚拟玩家。
 
 ## 前端联调
 
@@ -39,6 +39,7 @@ cd frontend && npm run dev
 | `NEXT_PHASE` / `PREV_PHASE` | 推进环节 |
 | `CAST_VOTE` | 提交作答 `{ truth, culprit }` |
 | `SHARE_CLUE` | 公开私人线索 |
+| `AUTO_FILL_ROSTER` | 教师补位至 12 人（不影响真实玩家，补位自动抽卡并公开线索） |
 | `DEV_*` | 开发工具（需 DEV_MODE=1） |
 | `PING` | 心跳 |
 

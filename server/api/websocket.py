@@ -118,6 +118,14 @@ async def handle_message(ws: WebSocket, raw: str, rooms: RoomManager) -> None:
             await _send(ws, {"type": "ERROR", "message": result["error"]})
         return
 
+    if msg_type == "AUTO_FILL_ROSTER":
+        result = await rooms.auto_fill_roster(ws)
+        if result.get("error"):
+            await _send(ws, {"type": "ERROR", "message": result["error"]})
+        else:
+            await _send(ws, {"type": "HOST_OK", "action": msg_type, **result})
+        return
+
     if msg_type == "CHECK_ROOM":
         result = await rooms.check_room(ws)
         if result.get("closed"):

@@ -206,21 +206,29 @@ getSharedUrl('assets/suqu-account-dispute/roles/zhao-qishan/poster.png')
 
 ---
 
-## 云部署
+## 云部署（阿里云 ECS）
 
 ```bash
-cd frontend && npm install && npm run build
-cd ../server && npm install && NODE_ENV=production npm start
+git clone https://github.com/KQqin/shengjiang.git
+cd shengjiang/frontend && npm install && npm run build
+cd ../server && pip install -r requirements.txt
+export DEV_MODE=0
+uvicorn main:app --host 0.0.0.0 --port 3001 --workers 1
 ```
 
-访问 `http://服务器:3001/` 即为 H5 前端（`server.js` 自动托管构建产物）。
+访问 `https://你的域名/` 即为 H5 前端（Python 后端托管 `frontend/dist/build/h5`）。
 
-前后端分离时，配置 `frontend/.env.production`：
+**学生链接**：`https://你的域名/#/pages/script-role?course=11`  
+**教师链接**：`https://你的域名/#/pages/script-host?course=11`
+
+同域部署时 `frontend/.env.production` 留空即可。前后端分离时配置：
 
 ```env
 VITE_API_BASE=https://api.example.com
 VITE_WS_URL=wss://api.example.com
 ```
+
+本地调试开发者工具：后端 `DEV_MODE=1`；前端在 `.env.development` 设 `VITE_DEV_TOOLS=1`。
 
 ---
 

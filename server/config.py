@@ -12,4 +12,4 @@ PORT = int(os.getenv("PORT", "3001"))
 
 MAX_PLAYERS = 12
 MAX_CONNECTIONS = 13
-DEV_MODE = os.getenv("DEV_MODE", "1") == "1"
+DEV_MODE = os.getenv("DEV_MODE", "0") == "1"

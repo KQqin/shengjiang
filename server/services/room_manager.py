@@ -93,6 +93,9 @@ class RoomManager:
                 return room
         return None
 
+    def _count_non_host(self, room: Room) -> int:
+        return sum(1 for p in room.players.values() if not p.is_host)
+
     def _count_real_connections(self, room: Room) -> int:
         return sum(1 for p in room.players.values() if p.websocket is not None)
 
@@ -150,7 +153,7 @@ class RoomManager:
             return {"error": "房间已满（最多 13 人）"}
         if self.get_player_by_ws(ws):
             return {"room": room, "player": self.get_player_by_ws(ws)}
-        if self._count_real_players(room) >= self.max_players:
+        if self._count_non_host(room) >= self.max_players:
             return {"error": "玩家已满（12 个角色）"}
 
         player = Player(
@@ -350,6 +353,8 @@ class RoomManager:
         for p in room.players.values():
             if not p.is_host and p.role_id and p.websocket:
                 await self.send_player_content(room, p)
+        await self._auto_share_bot_clues(room)
+        await self.broadcast_room(room)
         return {"ok": True}
 
     async def cast_vote(self, ws: WebSocket, truth: Any, culprit: Any) -> dict[str, Any]:
@@ -379,6 +384,51 @@ class RoomManager:
         await self.broadcast_room(room)
         return {"ok": True}
 
+    def _share_player_clue(self, room: Room, player: Player, clue_key: str) -> bool:
+        """将玩家私人线索写入公开池；成功返回 True，已存在或无效返回 False。"""
+        if player.is_host or not player.role_id:
+            return False
+        if clue_key not in unlocked_sections(room.phase_index):
+            return False
+
+        role = self._role_by_id(player.role_id)
+        if not role:
+            return False
+
+        clue_index = 0 if clue_key == "clue1" else 1 if clue_key == "clue2" else -1
+        if clue_index < 0 or clue_index >= len(role["privateClues"]):
+            return False
+
+        share_id = f"{player.id}:{clue_key}"
+        if any(s.get("id") == share_id for s in room.shared_clues):
+            return False
+
+        label = "私人线索 ①" if clue_key == "clue1" else "私人线索 ②"
+        room.shared_clues.append(
+            {
+                "id": share_id,
+                "playerId": player.id,
+                "playerName": player.nickname,
+                "roleName": role["name"],
+                "clueKey": clue_key,
+                "title": f"{role['name']} · {label}",
+                "content": role["privateClues"][clue_index],
+                "sharedAt": int(__import__("time").time() * 1000),
+                "fromBot": player.is_bot,
+            }
+        )
+        return True
+
+    async def _auto_share_bot_clues(self, room: Room) -> int:
+        shared = 0
+        for clue_key in ("clue1", "clue2"):
+            for player in room.players.values():
+                if not player.is_bot:
+                    continue
+                if self._share_player_clue(room, player, clue_key):
+                    shared += 1
+        return shared
+
     async def share_clue(self, ws: WebSocket, clue_key: str) -> dict[str, Any]:
         room = self.get_room_by_ws(ws)
         player = self.get_player_by_ws(ws)
@@ -388,6 +438,8 @@ class RoomManager:
             return {"error": "教师不能公开线索"}
         if not player.role_id:
             return {"error": "请先抽取角色"}
+        if player.is_bot:
+            return {"error": "补位玩家线索由系统自动公开"}
 
         if clue_key not in unlocked_sections(room.phase_index):
             return {"error": "该线索尚未解锁"}
@@ -404,19 +456,7 @@ class RoomManager:
         if any(s.get("id") == share_id for s in room.shared_clues):
             return {"error": "该线索已在主页公开"}
 
-        label = "私人线索 ①" if clue_key == "clue1" else "私人线索 ②"
-        room.shared_clues.append(
-            {
-                "id": share_id,
-                "playerId": player.id,
-                "playerName": player.nickname,
-                "roleName": role["name"],
-                "clueKey": clue_key,
-                "title": f"{role['name']} · {label}",
-                "content": role["privateClues"][clue_index],
-                "sharedAt": int(__import__("time").time() * 1000),
-            }
-        )
+        self._share_player_clue(room, player, clue_key)
         await self.broadcast_room(room)
         return {"ok": True}
 
@@ -430,6 +470,36 @@ class RoomManager:
         room.players[bot.id] = bot
         return bot
 
+    async def auto_fill_roster(self, ws: WebSocket) -> dict[str, Any]:
+        """教师：用补位玩家凑满 12 人，不影响真实玩家，并自动抽卡与公开线索。"""
+        room = self.get_room_by_ws(ws)
+        player = self.get_player_by_ws(ws)
+        if not room or not player or not player.is_host:
+            return {"error": "仅教师可操作"}
+        if self._is_game_started(room):
+            return {"error": "游戏已开始，无法补位"}
+
+        missing = self.max_players - self._count_non_host(room)
+        if missing <= 0:
+            return {"error": "人数已满，无需补位"}
+
+        bot_count = self._count_bots(room)
+        added = 0
+        for i in range(missing):
+            self._add_bot(room, f"补位{bot_count + i + 1}")
+            added += 1
+
+        drawn = 0
+        for p in room.players.values():
+            if p.is_host or p.role_id:
+                continue
+            if self._assign_random_role(room, p):
+                drawn += 1
+
+        clues_shared = await self._auto_share_bot_clues(room)
+        await self.broadcast_room(room)
+        return {"ok": True, "added": added, "drawn": drawn, "cluesShared": clues_shared}
+
     async def dev_fill_players(self, ws: WebSocket, count: int = 11) -> dict[str, Any]:
         room = self.get_room_by_ws(ws)
         player = self.get_player_by_ws(ws)
@@ -437,7 +507,7 @@ class RoomManager:
             return {"error": "仅教师可操作"}
 
         bot_count = self._count_bots(room)
-        slots = min(count, self.max_players - bot_count)
+        slots = min(count, max(0, self.max_players - self._count_non_host(room)))
         for i in range(slots):
             self._add_bot(room, f"测试玩家{bot_count + i + 1}")
 

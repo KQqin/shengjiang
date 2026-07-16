@@ -13,7 +13,7 @@ export const courses = [
 ]
 
 export const slides = [
-  { title: '革命年代青年榜样故事', tag: '革命年代青年榜样系列', desc: '全新上线 · 含历史决战生成器 + 红色剧本杀', bg: 'slide-bg--1', id: 11 },
+  { title: '革命年代青年榜样故事', tag: '革命年代青年榜样系列', desc: '全新上线 · 含历史抉择生成器 + 红色剧本杀', bg: 'slide-bg--1', id: 11 },
   { title: '五四运动与新文化启蒙', tag: '觉醒年代系列', desc: '沉浸式互动全景课件 · 含 2 个游戏节点', bg: 'slide-bg--2', id: 1 },
   { title: '遵义会议：生死攸关的转折点', tag: '长征精神系列', desc: '策略推演 + 历史抉择互动', bg: 'slide-bg--3', id: 4 },
   { title: '乡村振兴战略解读', tag: '新时代思政系列', desc: 'AI 生成 · 可直接开课授课', bg: 'slide-bg--4', id: 7 },

@@ -18,6 +18,15 @@
       }
     },
     {
+      "path": "pages/history-choice",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "历史抉择生成器",
+        "navigationBarBackgroundColor": "#1A0F0A",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
       "path": "pages/script-host",
       "style": {
         "navigationBarTitleText": "教师大屏",

@@ -1,12 +1,16 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide } from '@dcloudio/uni-app'
 import * as ws from '@/utils/ws-client'
 import { getSharedUrl } from '@/utils/config'
 import {
+  clearAllHostSessions,
+  clearHostLobbySession,
   clearHostSession,
   isRejoinRecoverableError,
+  loadHostLobbySession,
   loadHostSession,
+  saveHostLobbySession,
   saveHostSession,
 } from '@/utils/script-session'
 
@@ -15,14 +19,19 @@ const scriptData = ref(null)
 const roomState = ref(null)
 const roomCode = ref('——')
 const phaseIndex = ref(0)
+const gameStarted = ref(false)
 const timerSec = ref(0)
 const timerRunning = ref(false)
 const showClues = ref(false)
 const showVote = ref(false)
 const showReveal = ref(false)
 const connStatus = ref('connecting') // connecting | connected | error
+const statusMessage = ref('')
 let timerInterval = null
 let pendingHostRejoin = false
+/** 当前页面内存会话，用于同页网络闪断重连 */
+let hostVisitSession = null
+let leavingIntentionally = false
 
 const phase = computed(() => scriptData.value?.phases?.[phaseIndex.value])
 const displayType = computed(() => {
@@ -31,6 +40,7 @@ const displayType = computed(() => {
 })
 
 const roomMeta = computed(() => {
+  if (statusMessage.value) return statusMessage.value
   if (connStatus.value === 'error') {
     return '后端未连接 · 请先启动 server（python main.py）'
   }
@@ -69,6 +79,49 @@ onLoad((q) => {
   if (q?.course) courseId.value = q.course
 })
 
+function rememberHostSession(session) {
+  if (!session?.roomCode || !session?.playerToken) return
+  hostVisitSession = {
+    roomCode: session.roomCode,
+    playerToken: session.playerToken,
+  }
+  if (gameStarted.value) {
+    saveHostSession(hostVisitSession)
+    clearHostLobbySession()
+  } else {
+    saveHostLobbySession(hostVisitSession)
+  }
+}
+
+function persistHostSessionIfStarted() {
+  if (!hostVisitSession || !gameStarted.value) return
+  saveHostSession(hostVisitSession)
+  clearHostLobbySession()
+}
+
+function leaveHostRoom({ intentional = false } = {}) {
+  if (gameStarted.value && hostVisitSession) {
+    saveHostSession(hostVisitSession)
+    clearHostLobbySession()
+    return
+  }
+
+  if (intentional && !gameStarted.value && hostVisitSession) {
+    ws.send('CLOSE_ROOM')
+    hostVisitSession = null
+    roomState.value = null
+    clearAllHostSessions()
+  }
+}
+
+function closeLobbyRoom() {
+  if (gameStarted.value || !hostVisitSession) return
+  ws.send('CLOSE_ROOM')
+  hostVisitSession = null
+  roomState.value = null
+  clearAllHostSessions()
+}
+
 onMounted(async () => {
   try {
     const res = await uni.request({ url: getSharedUrl('script-data.json') })
@@ -82,10 +135,12 @@ onMounted(async () => {
 
   ws.on('connected', () => {
     connStatus.value = 'connected'
-    const session = loadHostSession()
+    const session =
+      hostVisitSession || loadHostSession() || loadHostLobbySession()
     if (session?.playerToken && session?.roomCode) {
       pendingHostRejoin = true
       roomCode.value = session.roomCode
+      hostVisitSession = session
       ws.send('REJOIN_ROOM', {
         roomCode: session.roomCode,
         playerToken: session.playerToken,
@@ -98,7 +153,7 @@ onMounted(async () => {
     roomCode.value = msg.roomCode
     pendingHostRejoin = false
     if (msg.playerToken) {
-      saveHostSession({ roomCode: msg.roomCode, playerToken: msg.playerToken })
+      rememberHostSession({ roomCode: msg.roomCode, playerToken: msg.playerToken })
     }
   })
   ws.on('JOINED', (msg) => {
@@ -106,19 +161,36 @@ onMounted(async () => {
     roomCode.value = msg.roomCode
     pendingHostRejoin = false
     if (msg.playerToken) {
-      saveHostSession({ roomCode: msg.roomCode, playerToken: msg.playerToken })
+      rememberHostSession({ roomCode: msg.roomCode, playerToken: msg.playerToken })
     }
   })
   ws.on('ROOM_STATE', (msg) => {
     roomState.value = msg.room
     roomCode.value = msg.room.code
+    if (msg.room.gameStarted) gameStarted.value = true
     if (msg.room.phaseIndex !== phaseIndex.value) applyPhase(msg.room.phaseIndex)
     else updateVotes()
+    persistHostSessionIfStarted()
+  })
+  ws.on('ROOM_CLOSED', () => {
+    hostVisitSession = null
+    roomState.value = null
+    gameStarted.value = false
+    clearAllHostSessions()
+    statusMessage.value = '本局已结束'
   })
   ws.on('ERROR', (msg) => {
     if (pendingHostRejoin && isRejoinRecoverableError(msg.message)) {
       pendingHostRejoin = false
-      clearHostSession()
+      const hadGameSession = !!loadHostSession()
+      hostVisitSession = null
+      clearHostLobbySession()
+      if (hadGameSession || gameStarted.value) {
+        clearHostSession()
+        statusMessage.value = '房间已失效，请返回课件后重新开课'
+        connStatus.value = 'connected'
+        return
+      }
       ws.send('CREATE_ROOM')
       return
     }
@@ -142,8 +214,27 @@ onMounted(async () => {
   ws.connect()
 })
 
+onShow(() => {
+  if (!scriptData.value || connStatus.value === 'error') return
+  ws.connect()
+})
+
+onHide(() => {
+  if (!gameStarted.value) {
+    closeLobbyRoom()
+  }
+  ws.disconnect()
+})
+
 onUnmounted(() => {
   stopTimer()
+  if (!leavingIntentionally) {
+    leaveHostRoom({ intentional: false })
+  } else if (gameStarted.value) {
+    leaveHostRoom({ intentional: true })
+  }
+  ws.clearHandlers()
+  ws.disconnect()
 })
 
 function applyPhase(i) {
@@ -186,7 +277,19 @@ function resetTimer() {
 }
 
 function goBack() {
+  leavingIntentionally = true
+  if (!gameStarted.value) {
+    closeLobbyRoom()
+  } else if (hostVisitSession) {
+    saveHostSession(hostVisitSession)
+    clearHostLobbySession()
+  }
   uni.navigateBack()
+}
+
+function endGame() {
+  if (!gameStarted.value) return
+  ws.send('END_GAME')
 }
 
 function prevPhase() {
@@ -261,6 +364,7 @@ function goDevPreview() {
       <button class="btn primary" @click="nextPhase">下一环节 →</button>
       <button class="btn gold" @click="startTimer">{{ timerRunning ? '暂停' : '开始计时' }}</button>
       <button class="btn ghost" @click="resetTimer">重置</button>
+      <button v-if="gameStarted" type="button" class="btn danger" @click="endGame">结束游戏</button>
       <view class="dots">
         <view
           v-for="(p, i) in scriptData?.phases || []"
@@ -514,6 +618,7 @@ function goDevPreview() {
 
 .btn.primary { background: #e84855; color: #fff; }
 .btn.gold { background: #ffd166; color: #1a1a1a; }
+.btn.danger { background: #8b2e2e; color: #fff; border: 1px solid rgba(255, 120, 120, 0.35); }
 .btn.ghost { background: rgba(255, 255, 255, 0.1); color: #fff; }
 
 .dots {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import random
 import secrets
 from dataclasses import dataclass, field
@@ -41,6 +42,7 @@ class RoomManager:
         self.rooms: dict[str, Room] = {}
         self._ws_index: dict[int, str] = {}
         self._token_index: dict[str, tuple[str, str]] = {}
+        self._host_cleanup_tasks: dict[str, asyncio.Task] = {}
 
     def _new_player_id(self) -> str:
         return secrets.token_hex(4)
@@ -100,6 +102,24 @@ class RoomManager:
     def _count_bots(self, room: Room) -> int:
         return sum(1 for p in room.players.values() if p.is_bot)
 
+    def _host_player(self, room: Room) -> Player | None:
+        return room.players.get(room.host_player_id)
+
+    def _host_is_online(self, room: Room) -> bool:
+        host = self._host_player(room)
+        return bool(host and host.websocket is not None)
+
+    def _is_game_started(self, room: Room) -> bool:
+        """开局标志：12 个角色全部抽完"""
+        return len(room.roles_taken) >= self.max_players
+
+    def _lobby_closed_error(self, room: Room) -> str | None:
+        if self._is_game_started(room):
+            return None
+        if not self._host_is_online(room):
+            return "房间已关闭，请向教师索要新房间号"
+        return None
+
     async def create_room(self, ws: WebSocket) -> Room:
         code = self._create_code()
         room = Room(code=code)
@@ -121,6 +141,11 @@ class RoomManager:
         room = self.rooms.get(code)
         if not room:
             return {"error": "房间不存在"}
+        lobby_err = self._lobby_closed_error(room)
+        if lobby_err:
+            return {"error": lobby_err}
+        if self._is_game_started(room):
+            return {"error": "游戏已开始，无法新加入"}
         if self._count_real_connections(room) >= self.max_connections:
             return {"error": "房间已满（最多 13 人）"}
         if self.get_player_by_ws(ws):
@@ -160,6 +185,11 @@ class RoomManager:
         if not player:
             return {"error": "玩家席位已失效"}
 
+        if not player.is_host:
+            lobby_err = self._lobby_closed_error(room)
+            if lobby_err:
+                return {"error": lobby_err}
+
         existing = self.get_player_by_ws(ws)
         if existing and existing.id != player.id:
             return {"error": "当前连接已绑定其他玩家"}
@@ -171,7 +201,82 @@ class RoomManager:
             return {"error": "房间已满（最多 13 人）"}
 
         self._bind_ws(player, ws)
+        if player.is_host:
+            self._cancel_host_cleanup(room.code)
         return {"room": room, "player": player}
+
+    async def check_room(self, ws: WebSocket) -> dict[str, Any]:
+        room = self.get_room_by_ws(ws)
+        player = self.get_player_by_ws(ws)
+        if not room or not player:
+            return {"closed": True, "reason": "gone"}
+        if not player.is_host:
+            lobby_err = self._lobby_closed_error(room)
+            if lobby_err:
+                return {"closed": True, "reason": "host_left"}
+        return {
+            "ok": True,
+            "roomCode": room.code,
+            "phaseIndex": room.phase_index,
+            "gameStarted": self._is_game_started(room),
+            "hostConnected": self._host_is_online(room),
+        }
+
+    async def close_room(self, ws: WebSocket) -> dict[str, Any]:
+        room = self.get_room_by_ws(ws)
+        player = self.get_player_by_ws(ws)
+        if not room or not player:
+            return {"error": "未加入房间"}
+        if not player.is_host:
+            return {"error": "仅教师可关闭房间"}
+        if self._is_game_started(room):
+            return {"error": "游戏已开始，请使用「结束游戏」"}
+        await self._destroy_room(room, reason="host_left")
+        return {"ok": True}
+
+    async def end_game(self, ws: WebSocket) -> dict[str, Any]:
+        room = self.get_room_by_ws(ws)
+        player = self.get_player_by_ws(ws)
+        if not room or not player:
+            return {"error": "未加入房间"}
+        if not player.is_host:
+            return {"error": "仅教师可结束游戏"}
+        if not self._is_game_started(room):
+            return {"error": "尚未全员抽卡，无法结束游戏"}
+        await self._destroy_room(room, reason="game_ended")
+        return {"ok": True}
+
+    def _cancel_host_cleanup(self, room_code: str) -> None:
+        task = self._host_cleanup_tasks.pop(room_code, None)
+        if task and not task.done():
+            task.cancel()
+
+    async def _destroy_room(self, room: Room, *, reason: str = "closed") -> None:
+        self._cancel_host_cleanup(room.code)
+        closed_payload = {
+            "type": "ROOM_CLOSED",
+            "reason": reason,
+            "roomCode": room.code,
+        }
+        for player in list(room.players.values()):
+            if not player.is_host and player.websocket:
+                await self._send(player.websocket, closed_payload)
+        if any(
+            not p.is_host and p.websocket is not None for p in room.players.values()
+        ):
+            await asyncio.sleep(0.15)
+        for player in list(room.players.values()):
+            if not player.is_host and player.websocket:
+                try:
+                    await player.websocket.close(code=1000, reason="room closed")
+                except Exception:
+                    pass
+        for player in list(room.players.values()):
+            self._unregister_token(player.token)
+            if player.websocket:
+                self._unbind_ws(player.websocket)
+                player.websocket = None
+        self.rooms.pop(room.code, None)
 
     async def disconnect(self, ws: WebSocket) -> None:
         player = self.get_player_by_ws(ws)
@@ -181,6 +286,11 @@ class RoomManager:
 
         self._unbind_ws(ws)
         player.websocket = None
+
+        if player.is_host and not self._is_game_started(room):
+            await self._destroy_room(room, reason="host_left")
+            return
+
         await self.broadcast_room(room)
 
     def _assign_random_role(self, room: Room, player: Player) -> bool:
@@ -205,7 +315,7 @@ class RoomManager:
             return {"error": "教师不能抽取角色"}
         if player.role_id:
             return {"error": "你已经拥有角色"}
-        if room.phase_index > 0:
+        if self._is_game_started(room):
             return {"error": "游戏已开始，不能抽卡"}
         if not self._assign_random_role(room, player):
             return {"error": "角色已被抽完"}
@@ -463,6 +573,9 @@ class RoomManager:
             "voteSubmissions": vote_submissions,
             "votedCount": voted_count,
             "rolesRemaining": len(self.script_data["roles"]) - len(room.roles_taken),
+            "rolesDrawn": len(room.roles_taken),
+            "gameStarted": self._is_game_started(room),
+            "hostConnected": self._host_is_online(room),
             "publicCluesReleased": room.phase_index >= 4,
             "sharedClues": list(room.shared_clues),
             "incident": self.script_data["incident"] if room.phase_index >= 1 else None,

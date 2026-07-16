@@ -3,6 +3,7 @@ import { getWsUrl } from './config'
 const handlers = {}
 let connected = false
 let reconnectTimer = null
+let allowReconnect = true
 
 function emit(type, data) {
   ;(handlers[type] || []).forEach((fn) => fn(data))
@@ -29,7 +30,9 @@ function bindSocketEvents() {
     connected = false
     emit('disconnected')
     clearTimeout(reconnectTimer)
-    reconnectTimer = setTimeout(() => connect(), 3000)
+    if (allowReconnect) {
+      reconnectTimer = setTimeout(() => connect(), 3000)
+    }
   })
 
   uni.onSocketError(() => {
@@ -40,6 +43,7 @@ function bindSocketEvents() {
 let eventsBound = false
 
 export function connect() {
+  allowReconnect = true
   if (!eventsBound) {
     bindSocketEvents()
     eventsBound = true
@@ -74,4 +78,23 @@ export function off(type, fn) {
 
 export function isConnected() {
   return connected
+}
+
+/** 离开剧本杀页面时调用，避免教师/学生端监听器互相干扰 */
+export function clearHandlers() {
+  for (const key of Object.keys(handlers)) {
+    delete handlers[key]
+  }
+}
+
+export function disconnect() {
+  allowReconnect = false
+  connected = false
+  clearTimeout(reconnectTimer)
+  reconnectTimer = null
+  try {
+    uni.closeSocket()
+  } catch {
+    /* ignore */
+  }
 }

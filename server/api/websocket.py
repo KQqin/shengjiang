@@ -72,6 +72,22 @@ async def handle_message(ws: WebSocket, raw: str, rooms: RoomManager) -> None:
         await rooms.broadcast_room(room)
         return
 
+    if msg_type == "CLOSE_ROOM":
+        result = await rooms.close_room(ws)
+        if result.get("error"):
+            await _send(ws, {"type": "ERROR", "message": result["error"]})
+        else:
+            await _send(ws, {"type": "ROOM_CLOSED"})
+        return
+
+    if msg_type == "END_GAME":
+        result = await rooms.end_game(ws)
+        if result.get("error"):
+            await _send(ws, {"type": "ERROR", "message": result["error"]})
+        else:
+            await _send(ws, {"type": "ROOM_CLOSED", "reason": "game_ended"})
+        return
+
     if msg_type == "DRAW_ROLE":
         result = await rooms.draw_role(ws)
         if result.get("error"):
@@ -100,6 +116,14 @@ async def handle_message(ws: WebSocket, raw: str, rooms: RoomManager) -> None:
         result = await rooms.share_clue(ws, str(msg.get("clueKey", "")))
         if result.get("error"):
             await _send(ws, {"type": "ERROR", "message": result["error"]})
+        return
+
+    if msg_type == "CHECK_ROOM":
+        result = await rooms.check_room(ws)
+        if result.get("closed"):
+            await _send(ws, {"type": "ROOM_CLOSED", "reason": result.get("reason", "gone")})
+        else:
+            await _send(ws, {"type": "ROOM_OK", **result})
         return
 
     if msg_type == "PING":

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import * as ws from '@/utils/ws-client'
 import { getSharedUrl } from '@/utils/config'
@@ -40,6 +40,7 @@ const expandedRoleId = ref('')
 const posterLoadFailed = ref(false)
 const playerToken = ref('')
 const pendingRejoin = ref(false)
+let lastSyncedPhase = -1
 
 const identityCode = computed(() => formatIdentityCode(playerToken.value))
 
@@ -187,6 +188,48 @@ function initPreviewMode() {
   statusLine.value = `[预览] ${role.name} · ${data.phases?.[phaseIdx]?.name || '主界面'}`
 }
 
+function resetToJoinScreen(message = '教师已结束本局，请重新加入') {
+  joined.value = false
+  hasRole.value = false
+  drawVisible.value = false
+  roleReveal.value = null
+  playerContent.value = null
+  roomState.value = null
+  playerToken.value = ''
+  myPlayerId.value = ''
+  showCharacter.value = false
+  showScript.value = false
+  activeSheet.value = ''
+  voteTruth.value = ''
+  voteCulprit.value = ''
+  voteSubmitted.value = false
+  pendingRejoin.value = false
+  lastSyncedPhase = -1
+  clearPlayerSession()
+  statusLine.value = message
+  ws.disconnect()
+  setTimeout(() => ws.connect(), 200)
+}
+
+function syncPlayerContent(phaseIndex) {
+  if (!hasRole.value || !roleReveal.value?.id || !scriptData.value) return
+  const role = scriptData.value.roles.find((r) => r.id === roleReveal.value.id)
+  if (!role) return
+  playerContent.value = buildPlayerContent(role, phaseIndex, scriptData.value)
+  lastSyncedPhase = phaseIndex
+}
+
+function votePlaceholder(field) {
+  if (field.key === 'culprit') return '填写核心责任人姓名'
+  return field.placeholder || ''
+}
+
+function onVoteInput(key, e) {
+  const val = e?.detail?.value ?? e?.target?.value ?? ''
+  if (key === 'truth') voteTruth.value = val
+  else voteCulprit.value = val
+}
+
 onMounted(async () => {
   try {
     const res = await uni.request({ url: getSharedUrl('script-data.json') })
@@ -199,6 +242,8 @@ onMounted(async () => {
     initPreviewMode()
     return
   }
+
+  ws.clearHandlers()
 
   const saved = loadPlayerSession()
   if (saved?.roomCode) roomCode.value = saved.roomCode
@@ -230,43 +275,81 @@ onMounted(async () => {
       nickname: nickname.value.trim() || '玩家',
     })
     if (msg.isHost) {
-      statusLine.value = '你是教师，请使用教师大屏页面'
+      clearPlayerSession()
+      joined.value = false
+      hasRole.value = false
+      drawVisible.value = false
+      playerToken.value = ''
       pendingRejoin.value = false
+      statusLine.value = '你是教师，请使用教师大屏页面'
       return
     }
     if (msg.rejoined) {
       statusLine.value = `已恢复房间 ${msg.roomCode}`
-      drawVisible.value = true
+      if (!hasRole.value) drawVisible.value = true
       return
     }
+    pendingRejoin.value = false
     statusLine.value = `已加入房间 ${msg.roomCode}`
     drawVisible.value = true
   })
   ws.on('ROLE_DRAWN', (msg) => {
+    const firstDraw = !hasRole.value
     hasRole.value = true
     drawVisible.value = false
     roleReveal.value = msg.role
-    if (!pendingRejoin.value) showCharacter.value = true
+    if (firstDraw && !pendingRejoin.value) showCharacter.value = true
     statusLine.value = `你是：${msg.role.name}`
     pendingRejoin.value = false
   })
   ws.on('PLAYER_CONTENT', (msg) => {
     playerContent.value = msg.content
+    if (typeof msg.phaseIndex === 'number') lastSyncedPhase = msg.phaseIndex
   })
   ws.on('ROOM_STATE', (msg) => {
     roomState.value = msg.room
+    const phaseIdx = msg.room?.phaseIndex ?? 0
+    if (phaseIdx !== lastSyncedPhase) {
+      syncPlayerContent(phaseIdx)
+    }
     const me = msg.room?.players?.find((p) => p.id === myPlayerId.value)
     if (me) {
       voteTruth.value = me.voteTruth || ''
       voteCulprit.value = me.voteCulprit || ''
       voteSubmitted.value = !!me.hasVoted
+      if (me.roleName && !hasRole.value) {
+        hasRole.value = true
+        drawVisible.value = false
+      }
     }
-    if (joined.value && !hasRole.value && msg.room.phaseIndex > 0) {
+    if (joined.value && !hasRole.value && msg.room.gameStarted) {
       drawVisible.value = false
       statusLine.value = '游戏已开始，未能抽卡'
     }
+    if (
+      joined.value &&
+      !msg.room.gameStarted &&
+      msg.room.hostConnected === false
+    ) {
+      resetToJoinScreen('教师已离开，房间已关闭')
+      return
+    }
     if (pendingRejoin.value && !hasRole.value) {
       pendingRejoin.value = false
+    }
+  })
+  ws.on('ROOM_CLOSED', (msg) => {
+    const text =
+      msg.reason === 'game_ended'
+        ? '教师已结束本局，感谢参与'
+        : '教师已离开，房间已关闭，请重新加入'
+    resetToJoinScreen(text)
+  })
+  ws.on('disconnected', () => {
+    if (!joined.value) return
+    const session = loadPlayerSession()
+    if (session?.playerToken && session?.roomCode) {
+      pendingRejoin.value = true
     }
   })
   ws.on('ERROR', (msg) => {
@@ -275,14 +358,27 @@ onMounted(async () => {
       joined.value = false
       hasRole.value = false
       drawVisible.value = false
+      showCharacter.value = false
+      lastSyncedPhase = -1
       if (isRejoinRecoverableError(msg.message)) clearPlayerSession()
       statusLine.value = `恢复失败：${msg.message}，请重新加入`
+      return
+    }
+    if (joined.value && isRejoinRecoverableError(msg.message)) {
+      resetToJoinScreen(
+        msg.message.includes('房间') ? msg.message : '房间已关闭，请重新加入',
+      )
       return
     }
     statusLine.value = `⚠ ${msg.message}`
   })
 
   ws.connect()
+})
+
+onUnmounted(() => {
+  ws.clearHandlers()
+  ws.disconnect()
 })
 
 function joinRoom() {
@@ -397,6 +493,10 @@ function toggleRoleIntro(roleId) {
   expandedRoleId.value = expandedRoleId.value === roleId ? '' : roleId
 }
 
+function leaveRoom() {
+  resetToJoinScreen('已退出房间，可重新加入')
+}
+
 function goBack() {
   uni.navigateBack()
 }
@@ -418,8 +518,7 @@ function isMe(player) {
       <view class="join-form">
         <input v-model="roomCode" class="input" placeholder="输入 6 位房间号" maxlength="6" />
         <input v-model="nickname" class="input" placeholder="你的昵称" maxlength="12" />
-        <button class="btn primary" @click="joinRoom">加入房间</button>
-        <text v-if="identityCode" class="join-identity">已保存身份码 {{ identityCode }}（刷新可自动恢复）</text>
+        <button type="button" class="btn primary" @click="joinRoom">加入房间</button>
         <text class="join-status">{{ statusLine }}</text>
       </view>
     </view>
@@ -791,43 +890,46 @@ function isMe(player) {
           <button class="sheet-close" @click="closeSheet">✕</button>
         </view>
 
-        <scroll-view scroll-y class="sheet-body">
-          <template v-if="activeSheet === 'vote'">
-            <text class="sheet-block-title">填写你的推理结论</text>
-            <text class="sheet-muted">请根据剧本与线索，用简短文字作答；提交后教师端可实时查看。</text>
-            <view
-              v-for="field in playerContent?.voteForm?.fields || []"
-              :key="field.key"
-              class="vote-field"
-            >
-              <text class="vote-label">{{ field.label }}</text>
-              <textarea
-                v-if="field.key === 'truth'"
-                v-model="voteTruth"
-                class="vote-input vote-textarea"
-                :placeholder="field.placeholder"
-                maxlength="200"
-              />
-              <input
-                v-else
-                v-model="voteCulprit"
-                class="vote-input"
-                :placeholder="field.placeholder"
-                maxlength="20"
-              />
-            </view>
-            <button class="btn primary sheet-btn" @click="submitVote">提交答案</button>
-            <text v-if="voteSubmitted" class="sheet-tip">已提交，可修改后再次点击提交更新</text>
-          </template>
+        <view v-if="activeSheet === 'vote'" class="sheet-body sheet-body--vote">
+          <text class="sheet-block-title">填写你的推理结论</text>
+          <text class="sheet-muted">请根据剧本与线索，用简短文字作答；提交后教师端可实时查看。</text>
+          <view
+            v-for="field in playerContent?.voteForm?.fields || []"
+            :key="field.key"
+            class="vote-field"
+          >
+            <text class="vote-label">{{ field.label }}</text>
+            <textarea
+              v-if="field.key === 'truth'"
+              :value="voteTruth"
+              class="vote-input vote-textarea"
+              :placeholder="votePlaceholder(field)"
+              maxlength="200"
+              @input="(e) => onVoteInput('truth', e)"
+            />
+            <textarea
+              v-else
+              :value="voteCulprit"
+              class="vote-input vote-input-single"
+              :placeholder="votePlaceholder(field)"
+              maxlength="20"
+              @input="(e) => onVoteInput('culprit', e)"
+            />
+          </view>
+          <button class="btn primary sheet-btn" @click="submitVote">提交答案</button>
+          <text v-if="voteSubmitted" class="sheet-tip">已提交，可修改后再次点击提交更新</text>
+        </view>
 
-          <template v-else>
+        <scroll-view v-else scroll-y class="sheet-body">
+          <template v-if="activeSheet === 'more'">
             <text class="sheet-p">房间号：{{ roomState?.code }}</text>
             <text class="sheet-p">当前环节：{{ phaseName }}</text>
             <text class="sheet-p">你的角色：{{ roleReveal?.name }}</text>
             <button class="btn ghost sheet-btn" @click="openCharacter">查看人物设定</button>
             <button class="btn ghost sheet-btn" @click="openPrivateClues">查看私人线索</button>
-            <button class="btn ghost sheet-btn" @click="openScript">查看个人剧本</button>
-            <button class="btn ghost sheet-btn" @click="goBack">返回课件</button>
+            <button type="button" class="btn ghost sheet-btn" @click="openScript">查看个人剧本</button>
+            <button type="button" class="btn ghost sheet-btn" @click="leaveRoom">退出房间</button>
+            <button type="button" class="btn ghost sheet-btn" @click="goBack">返回课件</button>
           </template>
         </scroll-view>
       </view>
@@ -930,6 +1032,10 @@ function isMe(player) {
   font-size: 22rpx;
   color: rgba(212, 165, 116, 0.75);
   letter-spacing: 2rpx;
+}
+
+.join-clear {
+  margin-top: 16rpx;
 }
 
 .draw-card {
@@ -2319,6 +2425,15 @@ function isMe(player) {
 
 .vote-textarea {
   min-height: 160rpx;
+}
+
+.vote-input-single {
+  min-height: 88rpx;
+  height: 88rpx;
+}
+
+.sheet-body--vote {
+  padding: 24rpx 28rpx 48rpx;
 }
 
 .sheet-btn {

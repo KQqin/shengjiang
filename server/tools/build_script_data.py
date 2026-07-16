@@ -225,7 +225,7 @@ STATIC = {
             {
                 "key": "culprit",
                 "label": "核心元凶（填人名）",
-                "placeholder": "填写核心责任人姓名，如：苏小禾",
+                "placeholder": "填写核心责任人姓名",
             },
         ],
         "referenceAnswer": {

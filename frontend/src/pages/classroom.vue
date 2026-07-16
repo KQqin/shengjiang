@@ -77,6 +77,10 @@ function goRole() {
   uni.navigateTo({ url: `/pages/script-role?course=${courseId.value}` })
 }
 
+function goHistoryChoice() {
+  uni.navigateTo({ url: `/pages/history-choice?course=${courseId.value}` })
+}
+
 function scrollToSection(i) {
   activeIndex.value = i
   // #ifdef H5
@@ -207,9 +211,9 @@ function isGameNode(i) {
           <view v-else-if="sec.type === 'dual-games'" class="game-grid">
             <view class="game-card game-card--battle">
               <text class="game-tag">互动游戏 ①</text>
-              <view class="game-card-h3">⚔️ 历史决战生成器</view>
-              <view class="game-card-p">扮演 1920 年代青年，在关键历史节点做出抉择，系统自动生成不同剧情走向与结局。</view>
-              <button type="button" class="game-btn" @click="openGame('battle')">开始决战</button>
+              <view class="game-card-h3">⚔️ 历史抉择生成器</view>
+              <view class="game-card-p">青春守初心 廉洁担使命 · 教师大屏投屏，带领全班体验刘启耀、张其德、毛泽民、何叔衡四条抉择线。</view>
+              <button type="button" class="game-btn" @click="goHistoryChoice">教师大屏</button>
             </view>
             <view class="game-card game-card--script">
               <text class="game-tag">互动游戏 ②</text>

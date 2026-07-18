@@ -52,6 +52,16 @@ export default defineConfig({
         changeOrigin: true,
         bypass: sharedProxyBypass,
       },
+      '/health': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/ws-backend': {
+        target: 'ws://localhost:3001',
+        ws: true,
+        changeOrigin: true,
+        rewrite: () => '/',
+      },
     },
   },
 })

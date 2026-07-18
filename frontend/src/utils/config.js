@@ -11,12 +11,14 @@ export function getWsUrl() {
   // #ifdef H5
   if (typeof window !== 'undefined') {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const host = window.location.hostname
+    const host = window.location.host
     const pagePort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
-    // Vite/uni 开发时前端常在 5173，后端固定 3001（import.meta.env.DEV 在 uni 下可能为 false）
     const devFrontendPorts = new Set(['5173', '5174', '5175', '4173'])
-    const port = import.meta.env.DEV || devFrontendPorts.has(pagePort) ? '3001' : pagePort
-    return `${proto}://${host}:${port}`
+    if (import.meta.env.DEV || devFrontendPorts.has(pagePort)) {
+      // 开发态走 Vite 同源代理，避免浏览器直连 3001 失败
+      return `${proto}://${host}/ws-backend`
+    }
+    return `${proto}://${host}`
   }
   // #endif
 
@@ -34,12 +36,14 @@ export function getHealthUrl() {
 
   // #ifdef H5
   if (typeof window !== 'undefined') {
-    const host = window.location.hostname
+    const host = window.location.host
     const pagePort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
     const devFrontendPorts = new Set(['5173', '5174', '5175', '4173'])
-    const port = import.meta.env.DEV || devFrontendPorts.has(pagePort) ? '3001' : pagePort
     const proto = window.location.protocol === 'https:' ? 'https' : 'http'
-    return `${proto}://${host}:${port}/health`
+    if (import.meta.env.DEV || devFrontendPorts.has(pagePort)) {
+      return `${proto}://${host}/health`
+    }
+    return `${proto}://${host}/health`
   }
   // #endif
 

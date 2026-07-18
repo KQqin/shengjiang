@@ -151,7 +151,6 @@ function isGameNode(i) {
         <button type="button" class="back" @click="goBack">← 返回首页</button>
         <text class="title">{{ courseTitle }}</text>
       </view>
-      <button type="button" class="btn-teach">全屏上课</button>
     </view>
 
     <view class="body">

@@ -60,6 +60,9 @@ if (FRONTEND_H5_DIR / "index.html").is_file():
 
 
 if __name__ == "__main__":
+    import os
+
     import uvicorn
 
-    uvicorn.run("main:app", host=HOST, port=PORT, reload=True)
+    reload = os.getenv("RELOAD", "0") == "1"
+    uvicorn.run("main:app", host=HOST, port=PORT, reload=reload)

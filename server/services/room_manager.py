@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import re
 import secrets
 from dataclasses import dataclass, field
 from typing import Any
@@ -9,6 +10,8 @@ from typing import Any
 from fastapi import WebSocket
 
 from services.player_content import build_player_content, public_role, unlocked_sections
+
+_CULPRIT_SEP_RE = re.compile(r"[,，、；;|/\n\r\s]+|和|与|及|还有")
 
 
 @dataclass
@@ -67,6 +70,67 @@ class RoomManager:
             if role["id"] == role_id:
                 return role
         return None
+
+    def _inspector_role_ids(self) -> set[str]:
+        return {
+            role["id"]
+            for role in self.script_data.get("roles", [])
+            if role.get("group") == "inspector"
+        }
+
+    def _match_culprits_to_roles(self, culprit: str) -> list[dict[str, Any]]:
+        """从作答文本中检索剧本角色姓名；多人去重，须与角色名完全一致（子串命中）。"""
+        text = str(culprit or "").strip()
+        if not text:
+            return []
+        roles = self.script_data.get("roles", [])
+        matched_ids: set[str] = set()
+        matched: list[dict[str, Any]] = []
+
+        for role in sorted(roles, key=lambda item: len(item["name"]), reverse=True):
+            name = role["name"]
+            if name and name in text and role["id"] not in matched_ids:
+                matched.append(role)
+                matched_ids.add(role["id"])
+
+        for part in _CULPRIT_SEP_RE.split(text):
+            part = part.strip()
+            if not part:
+                continue
+            for role in roles:
+                if part == role["name"] and role["id"] not in matched_ids:
+                    matched.append(role)
+                    matched_ids.add(role["id"])
+
+        return matched
+
+    def _vote_weight_for_role_id(self, role_id: str | None) -> int:
+        if role_id and role_id in self._inspector_role_ids():
+            return 2
+        return 1
+
+    def _compute_vote_tally(self, room: Room) -> tuple[list[dict[str, Any]], int]:
+        counts: dict[str, dict[str, Any]] = {}
+        total_weight = 0
+        for player in room.players.values():
+            if player.is_host or not player.vote_culprit:
+                continue
+            targets = self._match_culprits_to_roles(player.vote_culprit)
+            if not targets:
+                continue
+            weight = self._vote_weight_for_role_id(player.role_id)
+            total_weight += weight * len(targets)
+            for target in targets:
+                role_id = target["id"]
+                if role_id not in counts:
+                    counts[role_id] = {
+                        "roleId": role_id,
+                        "roleName": target["name"],
+                        "votes": 0,
+                    }
+                counts[role_id]["votes"] += weight
+        tally = sorted(counts.values(), key=lambda item: (-item["votes"], item["roleName"]))
+        return tally, total_weight
 
     def _bind_ws(self, player: Player, ws: WebSocket) -> None:
         player.websocket = ws
@@ -615,19 +679,26 @@ class RoomManager:
                 }
             )
             if not p.is_host and has_voted:
+                vote_weight = self._vote_weight_for_role_id(p.role_id)
+                matched_culprits = [r["name"] for r in self._match_culprits_to_roles(p.vote_culprit)]
                 vote_submissions.append(
                     {
                         "playerId": p.id,
                         "nickname": p.nickname,
+                        "roleId": p.role_id,
                         "roleName": role["name"] if role else None,
                         "truth": p.vote_truth,
                         "culprit": p.vote_culprit,
+                        "matchedCulprits": matched_culprits,
+                        "voteWeight": vote_weight,
+                        "isInspector": vote_weight > 1,
                     }
                 )
 
         student_count = sum(1 for p in players if not p["isHost"])
         real_student_count = sum(1 for p in players if not p["isHost"] and not p["isBot"])
         voted_count = sum(1 for p in players if not p["isHost"] and p["hasVoted"])
+        vote_tally, vote_total_weight = self._compute_vote_tally(room)
 
         return {
             "code": room.code,
@@ -641,6 +712,8 @@ class RoomManager:
             "maxConnections": self.max_connections,
             "players": players,
             "voteSubmissions": vote_submissions,
+            "voteTally": vote_tally,
+            "voteTotalWeight": vote_total_weight,
             "votedCount": voted_count,
             "rolesRemaining": len(self.script_data["roles"]) - len(room.roles_taken),
             "rolesDrawn": len(room.roles_taken),

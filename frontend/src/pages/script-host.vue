@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onLoad, onShow, onHide } from '@dcloudio/uni-app'
 import * as ws from '@/utils/ws-client'
-import { getSharedUrl } from '@/utils/config'
+import { getSharedUrl, getHealthUrl } from '@/utils/config'
 import {
   clearAllHostSessions,
   clearHostLobbySession,
@@ -12,6 +12,7 @@ import {
   loadHostSession,
   saveHostLobbySession,
   saveHostSession,
+  syncServerBootSession,
 } from '@/utils/script-session'
 
 const courseId = ref('11')
@@ -32,6 +33,8 @@ let pendingHostRejoin = false
 /** 当前页面内存会话，用于同页网络闪断重连 */
 let hostVisitSession = null
 let leavingIntentionally = false
+let wsHandlersBound = false
+let roomBootstrapTimer = null
 
 const phase = computed(() => scriptData.value?.phases?.[phaseIndex.value])
 const displayType = computed(() => {
@@ -44,7 +47,8 @@ const roomMeta = computed(() => {
   if (connStatus.value === 'error') {
     return '后端未连接 · 请先启动 server（python main.py）'
   }
-  if (!roomState.value) return '连接中…'
+  if (connStatus.value === 'connecting') return '正在连接后端…'
+  if (!roomState.value) return 'WebSocket 已连接，正在创建房间…'
   const r = roomState.value
   return `已连接 ${r.connectionCount}/${r.maxConnections} · 玩家 ${r.playerCount}/${r.maxPlayers} · 已抽卡 ${r.maxPlayers - r.rolesRemaining}/${r.maxPlayers}`
 })
@@ -61,11 +65,101 @@ const playerChips = computed(() => {
 
 const voteSubmissions = computed(() => roomState.value?.voteSubmissions || [])
 
+const inspectorRoleIds = computed(() => {
+  const roles = scriptData.value?.roles || []
+  return new Set(roles.filter((r) => r.group === 'inspector').map((r) => r.id))
+})
+
+const CULPRIT_SEP_RE = /[,，、；;|/\n\r\s]+|和|与|及|还有/g
+
+function matchCulpritsToRoles(culprit = '') {
+  const text = String(culprit || '').trim()
+  if (!text) return []
+  const roles = scriptData.value?.roles || []
+  const matchedIds = new Set()
+  const matched = []
+
+  for (const role of [...roles].sort((a, b) => b.name.length - a.name.length)) {
+    if (role.name && text.includes(role.name) && !matchedIds.has(role.id)) {
+      matched.push(role)
+      matchedIds.add(role.id)
+    }
+  }
+
+  for (const part of text.split(CULPRIT_SEP_RE)) {
+    const seg = part.trim()
+    if (!seg) continue
+    for (const role of roles) {
+      if (seg === role.name && !matchedIds.has(role.id)) {
+        matched.push(role)
+        matchedIds.add(role.id)
+      }
+    }
+  }
+
+  return matched
+}
+
+function buildVoteTallyFromPlayers(players = []) {
+  const counts = new Map()
+  let totalWeight = 0
+  for (const player of players) {
+    if (player.isHost || !player.hasVoted || !player.voteCulprit) continue
+    const targets = matchCulpritsToRoles(player.voteCulprit)
+    if (!targets.length) continue
+    const weight = inspectorRoleIds.value.has(player.roleId) ? 2 : 1
+    totalWeight += weight * targets.length
+    for (const target of targets) {
+      const prev = counts.get(target.id) || { roleId: target.id, roleName: target.name, votes: 0 }
+      prev.votes += weight
+      counts.set(target.id, prev)
+    }
+  }
+  const tally = Array.from(counts.values()).sort(
+    (a, b) => b.votes - a.votes || a.roleName.localeCompare(b.roleName, 'zh-CN'),
+  )
+  return { tally, totalWeight }
+}
+
+const voteTally = computed(() => buildVoteTallyFromPlayers(roomState.value?.players || []).tally)
+
+const voteTallyMax = computed(() => {
+  const rows = voteTally.value
+  if (!rows.length) return 1
+  return Math.max(...rows.map((r) => r.votes || 0), 1)
+})
+
 const voteProgress = computed(() => {
   if (!roomState.value) return ''
   const max = roomState.value.playerCount || 12
-  return `（${roomState.value.votedCount}/${max} 人已提交）`
+  const submitted = roomState.value.votedCount || 0
+  const { totalWeight } = buildVoteTallyFromPlayers(roomState.value.players || [])
+  return `（${submitted}/${max} 人已提交 · 有效计票 ${totalWeight} 票）`
 })
+
+function matchedCulpritsForItem(item) {
+  if (Array.isArray(item.matchedCulprits)) return item.matchedCulprits
+  return matchCulpritsToRoles(item.culprit).map((r) => r.name)
+}
+
+const VOTE_BAR_TRACK_RPX = 420
+
+function avatarColor(name = '') {
+  const colors = ['#8B4513', '#6B2737', '#2D5016', '#4A4A6A', '#9B2335', '#3D5C1A']
+  let sum = 0
+  for (const ch of name) sum += ch.charCodeAt(0)
+  return colors[sum % colors.length]
+}
+
+function voteBarStyle(votes = 0) {
+  const max = voteTallyMax.value || 1
+  const ratio = Math.max(votes, 0) / max
+  const widthRpx = Math.max(Math.round(ratio * VOTE_BAR_TRACK_RPX), votes > 0 ? 36 : 0)
+  return {
+    width: `${widthRpx}rpx`,
+    background: '#e84855',
+  }
+}
 
 const fillableSlots = computed(() => {
   if (!roomState.value || gameStarted.value) return 0
@@ -129,36 +223,59 @@ function closeLobbyRoom() {
   clearAllHostSessions()
 }
 
-onMounted(async () => {
-  try {
-    const res = await uni.request({ url: getSharedUrl('script-data.json') })
-    if (res.statusCode !== 200 || !res.data) throw new Error('load failed')
-    scriptData.value = res.data
-    if (scriptData.value?.phases?.length) applyPhase(0)
-  } catch {
-    connStatus.value = 'error'
+function clearRoomBootstrapTimer() {
+  if (roomBootstrapTimer) {
+    clearTimeout(roomBootstrapTimer)
+    roomBootstrapTimer = null
+  }
+}
+
+function requestHostRoom() {
+  const session =
+    hostVisitSession || loadHostSession() || loadHostLobbySession()
+  if (session?.playerToken && session?.roomCode) {
+    pendingHostRejoin = true
+    roomCode.value = session.roomCode
+    hostVisitSession = session
+    ws.send('REJOIN_ROOM', {
+      roomCode: session.roomCode,
+      playerToken: session.playerToken,
+    })
     return
   }
+  ws.send('CREATE_ROOM')
+}
+
+function scheduleRoomBootstrapTimeout() {
+  clearRoomBootstrapTimer()
+  roomBootstrapTimer = setTimeout(() => {
+    if (roomState.value) return
+    if (connStatus.value === 'connected') {
+      statusMessage.value = '房间创建超时，正在重试…'
+      pendingHostRejoin = false
+      ws.send('CREATE_ROOM')
+      scheduleRoomBootstrapTimeout()
+      return
+    }
+    connStatus.value = 'error'
+    statusMessage.value = 'WebSocket 连接超时 · 请确认后端已启动（python main.py）并重启前端 dev'
+  }, 8000)
+}
+
+function bindWsHandlers() {
+  if (wsHandlersBound) return
+  wsHandlersBound = true
 
   ws.on('connected', () => {
     connStatus.value = 'connected'
-    const session =
-      hostVisitSession || loadHostSession() || loadHostLobbySession()
-    if (session?.playerToken && session?.roomCode) {
-      pendingHostRejoin = true
-      roomCode.value = session.roomCode
-      hostVisitSession = session
-      ws.send('REJOIN_ROOM', {
-        roomCode: session.roomCode,
-        playerToken: session.playerToken,
-      })
-      return
-    }
-    ws.send('CREATE_ROOM')
+    statusMessage.value = ''
+    requestHostRoom()
+    scheduleRoomBootstrapTimeout()
   })
   ws.on('ROOM_CREATED', (msg) => {
     roomCode.value = msg.roomCode
     pendingHostRejoin = false
+    statusMessage.value = ''
     if (msg.playerToken) {
       rememberHostSession({ roomCode: msg.roomCode, playerToken: msg.playerToken })
     }
@@ -167,6 +284,7 @@ onMounted(async () => {
     if (!msg.isHost) return
     roomCode.value = msg.roomCode
     pendingHostRejoin = false
+    statusMessage.value = ''
     if (msg.playerToken) {
       rememberHostSession({ roomCode: msg.roomCode, playerToken: msg.playerToken })
     }
@@ -174,6 +292,8 @@ onMounted(async () => {
   ws.on('ROOM_STATE', (msg) => {
     roomState.value = msg.room
     roomCode.value = msg.room.code
+    statusMessage.value = ''
+    clearRoomBootstrapTimer()
     if (msg.room.gameStarted) gameStarted.value = true
     if (msg.room.phaseIndex !== phaseIndex.value) applyPhase(msg.room.phaseIndex)
     else updateVotes()
@@ -199,6 +319,7 @@ onMounted(async () => {
         return
       }
       ws.send('CREATE_ROOM')
+      scheduleRoomBootstrapTimeout()
       return
     }
     if (roomState.value) roomState.value._error = msg.message
@@ -217,34 +338,82 @@ onMounted(async () => {
     }
   })
   ws.on('error', () => {
-    if (!roomState.value) connStatus.value = 'error'
+    if (!roomState.value) {
+      connStatus.value = 'error'
+      statusMessage.value = 'WebSocket 连接失败 · 请确认后端已启动'
+    }
   })
   ws.on('disconnected', () => {
-    if (!roomState.value) connStatus.value = 'error'
+    if (!roomState.value) {
+      connStatus.value = 'connecting'
+      statusMessage.value = '连接断开，正在重试…'
+    }
   })
+}
 
-  ws.connect()
+async function bootstrapHostConnection() {
+  connStatus.value = 'connecting'
+  statusMessage.value = '正在检测后端…'
+  try {
+    const health = await uni.request({ url: getHealthUrl(), timeout: 5000 })
+    if (health.statusCode !== 200) throw new Error('health bad')
+  } catch {
+    connStatus.value = 'error'
+    statusMessage.value = '后端未连接 · 请在 shengjiang/server 运行 python main.py（端口 3001）'
+    return
+  }
+
+  await syncServerBootSession(getHealthUrl)
+  bindWsHandlers()
+  if (!ws.isConnected()) {
+    ws.connect()
+  } else {
+    requestHostRoom()
+    scheduleRoomBootstrapTimeout()
+  }
+}
+
+onMounted(async () => {
+  try {
+    const res = await uni.request({ url: getSharedUrl('script-data.json') })
+    if (res.statusCode !== 200 || !res.data) throw new Error('load failed')
+    scriptData.value = res.data
+    if (scriptData.value?.phases?.length) applyPhase(0)
+  } catch {
+    connStatus.value = 'error'
+    statusMessage.value = '剧本数据加载失败 · 请确认前端 dev 或后端 /shared 可访问'
+    return
+  }
+
+  await bootstrapHostConnection()
 })
 
 onShow(() => {
   if (!scriptData.value || connStatus.value === 'error') return
-  ws.connect()
+  if (!ws.isConnected()) {
+    ws.connect()
+    return
+  }
+  if (!roomState.value) {
+    requestHostRoom()
+    scheduleRoomBootstrapTimeout()
+  }
 })
 
 onHide(() => {
-  if (!gameStarted.value) {
-    closeLobbyRoom()
-  }
+  clearRoomBootstrapTimer()
   ws.disconnect()
 })
 
 onUnmounted(() => {
   stopTimer()
+  clearRoomBootstrapTimer()
   if (!leavingIntentionally) {
     leaveHostRoom({ intentional: false })
   } else if (gameStarted.value) {
     leaveHostRoom({ intentional: true })
   }
+  wsHandlersBound = false
   ws.clearHandlers()
   ws.disconnect()
 })
@@ -281,11 +450,6 @@ function stopTimer() {
     clearInterval(timerInterval)
     timerInterval = null
   }
-}
-
-function resetTimer() {
-  stopTimer()
-  timerSec.value = scriptData.value.phases[phaseIndex.value].durationSec
 }
 
 function navigateBackToCourse() {
@@ -395,14 +559,13 @@ function goDevPreview() {
       <button class="btn ghost" @click="prevPhase">← 上一环节</button>
       <button class="btn primary" @click="nextPhase">下一环节 →</button>
       <button class="btn gold" @click="startTimer">{{ timerRunning ? '暂停' : '开始计时' }}</button>
-      <button class="btn ghost" @click="resetTimer">重置</button>
       <button
         v-if="fillableSlots > 0"
         class="btn fill"
         @click="autoFillRoster"
       >自动补齐 {{ fillableSlots }} 人</button>
       <button v-if="phase?.key === 'search2'" class="btn ghost" @click="showClues = true">查看公共线索</button>
-      <button v-if="phase?.key === 'vote'" class="btn ghost" @click="showVote = true">查看作答汇总</button>
+      <button v-if="phase?.key === 'vote'" class="btn ghost" @click="showVote = true">查看投票汇总</button>
       <button v-if="phase?.key === 'reveal'" class="btn ghost" @click="showReveal = true">真相揭晓</button>
       <button v-if="gameStarted" type="button" class="btn danger" @click="endGame">结束游戏</button>
       <view class="dots">
@@ -444,13 +607,47 @@ function goDevPreview() {
 
     <view v-if="showVote" class="overlay" @click="showVote = false">
       <view class="overlay-box vote-overlay" @click.stop>
-        <text class="overlay-title">🗳️ 学生作答汇总 {{ voteProgress }}</text>
-        <scroll-view scroll-y class="vote-scroll">
-          <view v-if="!voteSubmissions.length" class="vote-empty">暂无提交，等待学生填写…</view>
-          <view v-for="item in voteSubmissions" :key="item.playerId" class="vote-card">
-            <text class="vote-card-head">{{ item.nickname }}（{{ item.roleName || '未抽卡' }}）</text>
-            <text class="vote-card-line"><text class="vote-card-label">事件真相：</text>{{ item.truth }}</text>
-            <text class="vote-card-line"><text class="vote-card-label">核心元凶：</text>{{ item.culprit }}</text>
+        <text class="overlay-title">🗳️ 投票汇总 {{ voteProgress }}</text>
+        <scroll-view scroll-y class="vote-scroll" :show-scrollbar="true">
+          <view class="vote-tally-section">
+            <text class="vote-section-title">核心元凶 · 票权统计</text>
+            <text class="vote-section-hint">仅统计与剧本角色姓名完全匹配的项；多人用顿号/逗号分隔；同一人重复填写去重；督查组每有效 1 人计 2 票</text>
+            <view v-if="!voteTally.length" class="vote-tally-empty">暂无有效投票，等待学生填写…</view>
+            <view v-for="item in voteTally" :key="item.roleId" class="vote-bar-row">
+              <view class="vote-bar-avatar-wrap">
+                <view class="vote-bar-avatar" :style="{ background: avatarColor(item.roleName) }">
+                  <text class="vote-bar-avatar-text">{{ (item.roleName || '?').slice(0, 1) }}</text>
+                </view>
+                <text class="vote-bar-name">{{ item.roleName }}</text>
+              </view>
+              <view class="vote-bar-body">
+                <view class="vote-bar-meta">
+                  <text class="vote-bar-count">{{ item.votes }} 票</text>
+                </view>
+                <view class="vote-bar-track">
+                  <view class="vote-bar-fill" :style="voteBarStyle(item.votes)" />
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <view class="vote-detail-section">
+            <text class="vote-section-title">逐人作答明细</text>
+            <view v-if="!voteSubmissions.length" class="vote-empty">暂无提交，等待学生填写…</view>
+            <view v-for="item in voteSubmissions" :key="item.playerId" class="vote-card">
+              <text class="vote-card-head">
+                {{ item.nickname }}（{{ item.roleName || '未抽卡' }}）
+                <text v-if="item.isInspector" class="vote-weight-tag">督查组 · 2 票权</text>
+              </text>
+              <text class="vote-card-line"><text class="vote-card-label">事件真相：</text>{{ item.truth }}</text>
+              <text class="vote-card-line"><text class="vote-card-label">核心元凶：</text>{{ item.culprit }}</text>
+              <text v-if="matchedCulpritsForItem(item).length" class="vote-card-line vote-card-valid">
+                <text class="vote-card-label">有效计票：</text>{{ matchedCulpritsForItem(item).join('、') }}
+              </text>
+              <text v-else class="vote-card-line vote-card-invalid">
+                <text class="vote-card-label">有效计票：</text>未匹配到剧本角色姓名
+              </text>
+            </view>
           </view>
         </scroll-view>
         <button class="btn ghost" @click="showVote = false">关闭</button>
@@ -734,15 +931,129 @@ function goDevPreview() {
 }
 
 .vote-overlay {
-  max-height: 80vh;
+  max-height: 88vh;
+  width: min(92vw, 720rpx);
   display: flex;
   flex-direction: column;
+  background: rgba(22, 22, 30, 0.98);
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx 20rpx;
+  box-sizing: border-box;
 }
 
 .vote-scroll {
-  flex: 1;
-  max-height: 50vh;
+  height: 62vh;
   margin-bottom: 20rpx;
+}
+
+.vote-tally-section {
+  padding-bottom: 28rpx;
+  margin-bottom: 28rpx;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.vote-detail-section {
+  padding-bottom: 12rpx;
+}
+
+.vote-section-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #ffd166;
+  margin-bottom: 8rpx;
+}
+
+.vote-section-hint {
+  display: block;
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 24rpx;
+  line-height: 1.5;
+}
+
+.vote-tally-empty {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+  padding: 32rpx 0 12rpx;
+}
+
+.vote-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin-bottom: 24rpx;
+}
+
+.vote-bar-avatar-wrap {
+  flex-shrink: 0;
+  width: 88rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.vote-bar-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid rgba(255, 209, 102, 0.35);
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.25);
+}
+
+.vote-bar-avatar-text {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #fff;
+}
+
+.vote-bar-name {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.72);
+  text-align: center;
+  line-height: 1.2;
+  max-width: 88rpx;
+  word-break: break-all;
+}
+
+.vote-bar-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.vote-bar-meta {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8rpx;
+}
+
+.vote-bar-count {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.vote-bar-track {
+  width: 420rpx;
+  max-width: 100%;
+  height: 36rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vote-bar-fill {
+  display: block;
+  height: 100%;
+  min-width: 36rpx;
+  border-radius: 999rpx;
+  box-shadow: 0 0 12rpx rgba(232, 72, 85, 0.45);
 }
 
 .vote-empty {
@@ -765,6 +1076,20 @@ function goDevPreview() {
   font-size: 28rpx;
   font-weight: 600;
   margin-bottom: 12rpx;
+  line-height: 1.5;
+}
+
+.vote-weight-tag {
+  display: inline-block;
+  margin-left: 8rpx;
+  padding: 2rpx 10rpx;
+  font-size: 20rpx;
+  font-weight: 500;
+  color: #ffd166;
+  background: rgba(255, 209, 102, 0.12);
+  border: 1px solid rgba(255, 209, 102, 0.28);
+  border-radius: 999rpx;
+  vertical-align: middle;
 }
 
 .vote-card-line {
@@ -777,6 +1102,14 @@ function goDevPreview() {
 
 .vote-card-label {
   color: #ffd166;
+}
+
+.vote-card-valid {
+  color: rgba(144, 238, 144, 0.92);
+}
+
+.vote-card-invalid {
+  color: rgba(255, 160, 160, 0.85);
 }
 
 .truth-summary {

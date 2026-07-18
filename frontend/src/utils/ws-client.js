@@ -4,14 +4,29 @@ const handlers = {}
 let connected = false
 let reconnectTimer = null
 let allowReconnect = true
+let pendingMessages = []
 
 function emit(type, data) {
   ;(handlers[type] || []).forEach((fn) => fn(data))
 }
 
+function flushPendingMessages() {
+  if (!connected) return
+  while (pendingMessages.length) {
+    const data = pendingMessages.shift()
+    try {
+      uni.sendSocketMessage({ data })
+    } catch {
+      pendingMessages.unshift(data)
+      break
+    }
+  }
+}
+
 function bindSocketEvents() {
   uni.onSocketOpen(() => {
     connected = true
+    flushPendingMessages()
     emit('connected')
   })
 
@@ -36,6 +51,7 @@ function bindSocketEvents() {
   })
 
   uni.onSocketError(() => {
+    connected = false
     emit('error')
   })
 }
@@ -60,10 +76,12 @@ export function connect() {
 }
 
 export function send(type, payload = {}) {
-  if (!connected) return
-  uni.sendSocketMessage({
-    data: JSON.stringify({ type, ...payload }),
-  })
+  const data = JSON.stringify({ type, ...payload })
+  if (!connected) {
+    pendingMessages.push(data)
+    return
+  }
+  uni.sendSocketMessage({ data })
 }
 
 export function on(type, fn) {
@@ -90,6 +108,7 @@ export function clearHandlers() {
 export function disconnect() {
   allowReconnect = false
   connected = false
+  pendingMessages = []
   clearTimeout(reconnectTimer)
   reconnectTimer = null
   try {

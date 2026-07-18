@@ -1,13 +1,22 @@
 /** 与后端 player_content.py 一致的环节解锁逻辑（6+1 环节） */
 
 export function unlockedSections(phaseIndex) {
-  const sections = ['public']
-  if (phaseIndex >= 1) sections.push('script', 'secret', 'allRoles', 'background')
+  const sections = ['public', 'background']
+  if (phaseIndex >= 1) sections.push('script', 'secret', 'allRoles')
   if (phaseIndex >= 3) sections.push('clue1')
   if (phaseIndex >= 4) sections.push('clue2')
   if (phaseIndex >= 5) sections.push('vote')
   if (phaseIndex >= 6) sections.push('reveal')
   return sections
+}
+
+export function formatPublicIntro(role) {
+  if (!role) return ''
+  const intro = role.publicIntro || ''
+  const gender = role.gender
+  if (!gender) return intro
+  if (intro.startsWith(`${gender}，`) || intro.startsWith(`${gender},`)) return intro
+  return `${gender}，${intro}`
 }
 
 export function publicRole(role) {
@@ -17,7 +26,7 @@ export function publicRole(role) {
     gender: role.gender,
     title: role.title,
     tag: role.tag,
-    publicIntro: role.publicIntro,
+    publicIntro: formatPublicIntro(role),
     poster: role.poster,
   }
 }
@@ -27,8 +36,9 @@ export function buildAllRoles(scriptData) {
     .map((r) => ({
       id: r.id,
       name: r.name,
+      gender: r.gender,
       title: r.title,
-      publicIntro: r.publicIntro,
+      publicIntro: formatPublicIntro(r),
       introOrder: r.introOrder,
     }))
     .sort((a, b) => a.introOrder - b.introOrder)

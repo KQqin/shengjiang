@@ -3,10 +3,20 @@ from __future__ import annotations
 from typing import Any
 
 
+def format_public_intro(role: dict[str, Any]) -> str:
+    intro = role.get("publicIntro", "")
+    gender = role.get("gender")
+    if not gender:
+        return intro
+    if intro.startswith(f"{gender}，") or intro.startswith(f"{gender},"):
+        return intro
+    return f"{gender}，{intro}"
+
+
 def unlocked_sections(phase_index: int) -> list[str]:
-    sections = ["public"]
+    sections = ["public", "background"]
     if phase_index >= 1:
-        sections.extend(["script", "secret", "allRoles", "background"])
+        sections.extend(["script", "secret", "allRoles"])
     if phase_index >= 3:
         sections.append("clue1")
     if phase_index >= 4:
@@ -25,7 +35,7 @@ def public_role(role: dict[str, Any]) -> dict[str, Any]:
         "gender": role["gender"],
         "title": role["title"],
         "tag": role["tag"],
-        "publicIntro": role["publicIntro"],
+        "publicIntro": format_public_intro(role),
         "poster": role.get("poster"),
     }
 
@@ -38,7 +48,8 @@ def build_all_roles(script_data: dict[str, Any]) -> list[dict[str, Any]]:
                 "id": role["id"],
                 "name": role["name"],
                 "title": role["title"],
-                "publicIntro": role["publicIntro"],
+                "gender": role["gender"],
+                "publicIntro": format_public_intro(role),
                 "introOrder": role.get("introOrder", 99),
             }
         )

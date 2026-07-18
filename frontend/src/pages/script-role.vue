@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import * as ws from '@/utils/ws-client'
 import { getSharedUrl } from '@/utils/config'
-import { buildPlayerContent, buildAllRoles } from '@/utils/script-content'
+import { buildPlayerContent, buildAllRoles, formatPublicIntro } from '@/utils/script-content'
 import {
   clearPlayerSession,
   formatIdentityCode,
@@ -29,14 +29,17 @@ const roomState = ref(null)
 const voteTruth = ref('')
 const voteCulprit = ref('')
 const voteSubmitted = ref(false)
+const voteDraftDirty = ref(false)
+const voteComposing = ref(false)
 
 const showCharacter = ref(false)
 const showScript = ref(false)
 const clueView = ref('table')
+const poolTab = ref('public')
 const focusedClue = ref(null)
 const activeSheet = ref('')
 const myPlayerId = ref('')
-const expandedRoleId = ref('')
+const expandedRoleIds = ref([])
 const posterLoadFailed = ref(false)
 const playerToken = ref('')
 const pendingRejoin = ref(false)
@@ -60,6 +63,21 @@ const scriptReadable = computed(() => unlocked.value.includes('script'))
 
 const unlocked = computed(() => playerContent.value?.unlocked || [])
 
+const backgroundParagraphs = computed(() => {
+  const text = playerContent.value?.background || scriptData.value?.background || ''
+  if (!text) return []
+  return text.split(/\n+/).filter(Boolean)
+})
+
+const myPublicIntro = computed(() => {
+  if (playerContent.value?.public) return formatPublicIntro(playerContent.value.public)
+  if (roleReveal.value) {
+    const role = scriptData.value?.roles?.find((r) => r.id === roleReveal.value.id)
+    return formatPublicIntro(role || roleReveal.value)
+  }
+  return ''
+})
+
 const phaseName = computed(() => {
   const idx = roomState.value?.phaseIndex ?? 0
   return scriptData.value?.phases?.[idx]?.name || '等待开始'
@@ -70,6 +88,11 @@ const sidePlayers = computed(() => {
   const mid = Math.ceil(list.length / 2)
   return { left: list.slice(0, mid), right: list.slice(mid) }
 })
+
+function parseClueHeadline(content = '') {
+  const m = String(content).match(/^【([^】]+)】/)
+  return m ? m[1].replace('·', ' · ') : ''
+}
 
 function mapPublicClue(c, i) {
   const title = c.title || ''
@@ -88,25 +111,67 @@ function mapPublicClue(c, i) {
   }
 }
 
+function mapSharedClue(c, i) {
+  const headline = parseClueHeadline(c.content)
+  return {
+    id: c.id,
+    type: 'shared',
+    clueKey: c.clueKey,
+    title: c.title,
+    shortTitle: (c.roleName || c.playerName || '玩家').slice(0, 6),
+    headline,
+    content: c.content,
+    sharedBy: c.roleName || c.playerName,
+    cardNo: `S-${String(i + 1).padStart(2, '0')}`,
+    icon: '📌',
+    accent: '#6B4423',
+  }
+}
+
 const publicPoolClues = computed(() => {
   if (!roomState.value?.publicCluesReleased || !scriptData.value?.publicClues) return []
   return scriptData.value.publicClues.map(mapPublicClue)
 })
 
-const sharedPoolClues = computed(() => {
-  return (roomState.value?.sharedClues || []).map((c, i) => ({
-    id: c.id,
-    type: 'shared',
-    title: c.title,
-    shortTitle: (c.roleName || c.playerName || '玩家').slice(0, 6),
-    content: c.content,
-    sharedBy: c.roleName || c.playerName,
-    cardNo: `S-${String(i + 1).padStart(2, '0')}`,
-    icon: '📌',
-  }))
+const sharedRound1Clues = computed(() =>
+  (roomState.value?.sharedClues || [])
+    .filter((c) => c.clueKey === 'clue1')
+    .map(mapSharedClue),
+)
+
+const sharedRound2Clues = computed(() =>
+  (roomState.value?.sharedClues || [])
+    .filter((c) => c.clueKey === 'clue2')
+    .map(mapSharedClue),
+)
+
+const poolTabs = computed(() => [
+  { key: 'public', label: '公共', count: publicPoolClues.value.length },
+  { key: 'round1', label: '一轮', count: sharedRound1Clues.value.length },
+  { key: 'round2', label: '二轮', count: sharedRound2Clues.value.length },
+])
+
+const visiblePoolClues = computed(() => {
+  if (poolTab.value === 'round1') return sharedRound1Clues.value
+  if (poolTab.value === 'round2') return sharedRound2Clues.value
+  return publicPoolClues.value
 })
 
-const centerClues = computed(() => [...publicPoolClues.value, ...sharedPoolClues.value])
+const poolEmptyHint = computed(() => {
+  if (poolTab.value === 'public') {
+    return roomState.value?.publicCluesReleased
+      ? '本区暂无线索'
+      : '公共线索将在「二轮线索」环节由教师同步公布'
+  }
+  if (poolTab.value === 'round1') return '一轮讨论中，同志可自愿将私人线索①推送到此区'
+  return '二轮讨论中，同志可自愿将私人线索②推送到此区'
+})
+
+const centerClues = computed(() => [
+  ...publicPoolClues.value,
+  ...sharedRound1Clues.value,
+  ...sharedRound2Clues.value,
+])
 
 const privateClueList = computed(() => {
   const list = []
@@ -185,6 +250,7 @@ function initPreviewMode() {
     sharedClues: [],
     players: [{ id: 'preview-host', nickname: '教师', isHost: true }, ...mockPlayers],
   }
+  syncPoolTabFromPhase(phaseIdx)
   statusLine.value = `[预览] ${role.name} · ${data.phases?.[phaseIdx]?.name || '主界面'}`
 }
 
@@ -203,12 +269,22 @@ function resetToJoinScreen(message = '教师已结束本局，请重新加入') 
   voteTruth.value = ''
   voteCulprit.value = ''
   voteSubmitted.value = false
+  voteDraftDirty.value = false
+  voteComposing.value = false
   pendingRejoin.value = false
+  expandedRoleIds.value = []
+  poolTab.value = 'public'
   lastSyncedPhase = -1
   clearPlayerSession()
   statusLine.value = message
   ws.disconnect()
   setTimeout(() => ws.connect(), 200)
+}
+
+function syncPoolTabFromPhase(phaseIndex) {
+  if (phaseIndex >= 4) poolTab.value = 'round2'
+  else if (phaseIndex >= 3) poolTab.value = 'round1'
+  else poolTab.value = 'public'
 }
 
 function syncPlayerContent(phaseIndex) {
@@ -226,8 +302,26 @@ function votePlaceholder(field) {
 
 function onVoteInput(key, e) {
   const val = e?.detail?.value ?? e?.target?.value ?? ''
+  voteDraftDirty.value = true
   if (key === 'truth') voteTruth.value = val
   else voteCulprit.value = val
+}
+
+function onVoteCompositionStart() {
+  voteComposing.value = true
+  voteDraftDirty.value = true
+}
+
+function onVoteCompositionEnd(key, e) {
+  voteComposing.value = false
+  onVoteInput(key, e)
+}
+
+function syncVoteFromServer(me) {
+  if (!me || voteDraftDirty.value || voteComposing.value) return
+  voteTruth.value = me.voteTruth || ''
+  voteCulprit.value = me.voteCulprit || ''
+  voteSubmitted.value = !!me.hasVoted
 }
 
 onMounted(async () => {
@@ -298,6 +392,7 @@ onMounted(async () => {
     hasRole.value = true
     drawVisible.value = false
     roleReveal.value = msg.role
+    syncPlayerContent(roomState.value?.phaseIndex ?? 0)
     if (firstDraw && !pendingRejoin.value) showCharacter.value = true
     statusLine.value = `你是：${msg.role.name}`
     pendingRejoin.value = false
@@ -311,12 +406,11 @@ onMounted(async () => {
     const phaseIdx = msg.room?.phaseIndex ?? 0
     if (phaseIdx !== lastSyncedPhase) {
       syncPlayerContent(phaseIdx)
+      syncPoolTabFromPhase(phaseIdx)
     }
     const me = msg.room?.players?.find((p) => p.id === myPlayerId.value)
     if (me) {
-      voteTruth.value = me.voteTruth || ''
-      voteCulprit.value = me.voteCulprit || ''
-      voteSubmitted.value = !!me.hasVoted
+      syncVoteFromServer(me)
       if (me.roleName && !hasRole.value) {
         hasRole.value = true
         drawVisible.value = false
@@ -429,6 +523,10 @@ function backToPublicPool() {
   clueView.value = 'table'
 }
 
+function setPoolTab(key) {
+  poolTab.value = key
+}
+
 function openClueFocus(card) {
   focusedClue.value = card
 }
@@ -486,11 +584,20 @@ function submitVote() {
   }
   ws.send('CAST_VOTE', { truth, culprit })
   voteSubmitted.value = true
+  voteDraftDirty.value = false
   statusLine.value = '答案已提交'
 }
 
+function isRoleIntroExpanded(roleId) {
+  return expandedRoleIds.value.includes(roleId)
+}
+
 function toggleRoleIntro(roleId) {
-  expandedRoleId.value = expandedRoleId.value === roleId ? '' : roleId
+  if (isRoleIntroExpanded(roleId)) {
+    expandedRoleIds.value = expandedRoleIds.value.filter((id) => id !== roleId)
+  } else {
+    expandedRoleIds.value = [...expandedRoleIds.value, roleId]
+  }
 }
 
 function leaveRoom() {
@@ -582,12 +689,23 @@ function isMe(player) {
               <view v-if="clueView === 'table'">
                 <text class="board-label">📋 公开卡池</text>
 
-                <view v-if="publicPoolClues.length" class="pool-section">
-                  <text class="pool-section-label">公共线索 · 教师公布</text>
-                  <view class="clue-grid clue-grid--pool">
+                <view class="pool-tabs">
+                  <view
+                    v-for="tab in poolTabs"
+                    :key="tab.key"
+                    class="pool-tab"
+                    :class="{ active: poolTab === tab.key }"
+                    @click="setPoolTab(tab.key)"
+                  >
+                    <text class="pool-tab-label">{{ tab.label }}</text>
+                    <text class="pool-tab-count">{{ tab.count }} 条</text>
+                  </view>
+                </view>
+
+                <view v-if="visiblePoolClues.length" class="clue-grid clue-grid--pool">
+                  <template v-for="card in visiblePoolClues" :key="card.id">
                     <view
-                      v-for="card in publicPoolClues"
-                      :key="card.id"
+                      v-if="card.type === 'public'"
                       class="pub-clue-card pub-clue-card--compact"
                       :style="{ '--accent': card.accent }"
                       @click="openClueFocus(card)"
@@ -608,15 +726,8 @@ function isMe(player) {
                         <text class="pub-clue-no">{{ card.cardNo }}</text>
                       </view>
                     </view>
-                  </view>
-                </view>
-
-                <view v-if="sharedPoolClues.length" class="pool-section">
-                  <text class="pool-section-label">玩家公开</text>
-                  <view class="clue-grid clue-grid--pool">
                     <view
-                      v-for="card in sharedPoolClues"
-                      :key="card.id"
+                      v-else
                       class="game-clue-card game-clue-card--compact game-clue-card--shared"
                       @click="openClueFocus(card)"
                     >
@@ -632,13 +743,14 @@ function isMe(player) {
                         <text class="game-clue-no">{{ card.cardNo }}</text>
                       </view>
                     </view>
-                  </view>
+                  </template>
                 </view>
 
-                <view v-if="!centerClues.length" class="clue-empty">
-                  <text class="clue-empty-icon">📜</text>
-                  <text class="clue-empty-text">线索将随教师推进环节解锁</text>
-                  <text class="clue-empty-hint">点底部「线索」查看私人线索 · 点击卡池卡片可放大</text>
+                <view v-else class="clue-empty clue-empty--pool">
+                  <text class="clue-empty-icon">{{ poolTab === 'public' ? '📜' : '📌' }}</text>
+                  <text class="clue-empty-text">{{ poolEmptyHint }}</text>
+                  <text v-if="centerClues.length" class="clue-empty-hint">切换上方分栏查看其他线索 · 点击卡片可放大阅读</text>
+                  <text v-else class="clue-empty-hint">点底部「线索」查看私人线索</text>
                 </view>
               </view>
 
@@ -836,7 +948,16 @@ function isMe(player) {
           <!-- 个人简介 -->
           <view class="script-block">
             <text class="block-title">人物简介 · 全员可见</text>
-            <text class="block-p">{{ playerContent?.public?.publicIntro || roleReveal.publicIntro }}</text>
+            <text class="block-p">{{ myPublicIntro }}</text>
+          </view>
+
+          <view v-if="unlocked.includes('background') && backgroundParagraphs.length" class="script-block">
+            <text class="block-title">主线剧情</text>
+            <text
+              v-for="(para, idx) in backgroundParagraphs"
+              :key="`bg-${idx}`"
+              class="block-p block-p--para"
+            >{{ para }}</text>
           </view>
 
           <!-- 个人剧本 -->
@@ -872,16 +993,16 @@ function isMe(player) {
               v-for="r in allRolesList"
               :key="r.id"
               class="role-intro-card"
-              :class="{ expanded: expandedRoleId === r.id, me: r.id === roleReveal.id }"
+              :class="{ expanded: isRoleIntroExpanded(r.id), me: r.id === roleReveal.id }"
             >
               <view class="role-intro-head" @click="toggleRoleIntro(r.id)">
                 <text class="role-intro-order">{{ r.introOrder }}</text>
                 <view class="role-intro-meta">
                   <text class="role-intro-name">{{ r.name }} · {{ r.title }}</text>
-                  <text class="role-intro-toggle">{{ expandedRoleId === r.id ? '收起' : '展开' }}</text>
+                  <text class="role-intro-toggle">{{ isRoleIntroExpanded(r.id) ? '收起' : '展开' }}</text>
                 </view>
               </view>
-              <text v-if="expandedRoleId === r.id" class="role-intro-body">{{ r.publicIntro }}</text>
+              <text v-if="isRoleIntroExpanded(r.id)" class="role-intro-body">{{ r.publicIntro }}</text>
             </view>
           </view>
         </scroll-view>
@@ -914,6 +1035,8 @@ function isMe(player) {
               class="vote-input vote-textarea"
               :placeholder="votePlaceholder(field)"
               maxlength="200"
+              @compositionstart="onVoteCompositionStart"
+              @compositionend="(e) => onVoteCompositionEnd('truth', e)"
               @input="(e) => onVoteInput('truth', e)"
             />
             <textarea
@@ -922,6 +1045,8 @@ function isMe(player) {
               class="vote-input vote-input-single"
               :placeholder="votePlaceholder(field)"
               maxlength="20"
+              @compositionstart="onVoteCompositionStart"
+              @compositionend="(e) => onVoteCompositionEnd('culprit', e)"
               @input="(e) => onVoteInput('culprit', e)"
             />
           </view>
@@ -1242,6 +1367,66 @@ function isMe(player) {
   letter-spacing: 0.1em;
 }
 
+/* ===== 公开卡池 · 三分栏（苏区卷宗风） ===== */
+.pool-tabs {
+  display: flex;
+  gap: 6rpx;
+  margin-bottom: 14rpx;
+  padding: 6rpx;
+  background: rgba(45, 28, 12, 0.14);
+  border-radius: 10rpx;
+  border: 1px solid rgba(61, 41, 20, 0.28);
+  box-shadow: inset 0 1rpx 0 rgba(255, 240, 210, 0.25);
+}
+
+.pool-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12rpx 4rpx;
+  border-radius: 8rpx;
+  background: rgba(255, 248, 235, 0.28);
+  border: 1px solid rgba(70, 50, 30, 0.16);
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+
+  &.active {
+    background: linear-gradient(180deg, #fff9ef 0%, #ede0c4 100%);
+    border-color: rgba(139, 58, 58, 0.5);
+    box-shadow:
+      0 2rpx 10rpx rgba(0, 0, 0, 0.12),
+      inset 0 1rpx 0 rgba(255, 255, 255, 0.65);
+
+    .pool-tab-label {
+      color: #8b3a3a;
+      font-weight: 700;
+    }
+
+    .pool-tab-count {
+      color: rgba(139, 58, 58, 0.75);
+    }
+  }
+}
+
+.pool-tab-label {
+  font-size: 24rpx;
+  color: rgba(61, 41, 20, 0.78);
+  letter-spacing: 0.16em;
+  font-family: 'Noto Serif SC', 'Songti SC', serif;
+}
+
+.pool-tab-count {
+  margin-top: 4rpx;
+  font-size: 18rpx;
+  color: rgba(61, 41, 20, 0.48);
+  letter-spacing: 0.06em;
+}
+
+.clue-empty--pool {
+  padding: 48rpx 16rpx;
+}
+
 .pool-section {
   margin-bottom: 16rpx;
 }
@@ -1478,7 +1663,7 @@ function isMe(player) {
 }
 
 .clue-grid--pool {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 6rpx;
 }
 

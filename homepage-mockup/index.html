@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>数智红途 · 智学课堂</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --red: #E84855;
+      --red-deep: #C62828;
+      --red-soft: #FF8A8A;
+      --red-light: #FFF0F3;
+      --pink: #FFD6E0;
+      --peach: #FFE8D6;
+      --cream: #FFF9F5;
+      --bg: #F5F6F8;
+      --white: #FFFFFF;
+      --text: #2D2D2D;
+      --text-sec: #666666;
+      --text-mut: #999999;
+      --border: #EBEBEB;
+      --shadow: 0 4px 20px rgba(232, 72, 85, 0.08);
+      --shadow-lg: 0 8px 32px rgba(232, 72, 85, 0.12);
+      --radius: 10px;
+      --radius-lg: 16px;
+      --max: 1200px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    a { text-decoration: none; color: inherit; }
+
+    /* ===== Header ===== */
+    .header {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .logo-mark {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--red-soft), var(--red-deep));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .logo-name {
+      font-size: 20px;
+      font-weight: 700;
+      background: linear-gradient(90deg, var(--red-deep), var(--red));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .nav-main {
+      display: flex;
+      gap: 4px;
+    }
+
+    .nav-main a {
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-sec);
+      border-radius: 8px;
+      transition: 0.2s;
+    }
+
+    .nav-main a:hover,
+    .nav-main a.active {
+      color: var(--red);
+      background: var(--red-light);
+    }
+
+    .search-bar {
+      flex: 1;
+      max-width: 420px;
+      display: flex;
+      align-items: center;
+      height: 40px;
+      border: 1.5px solid var(--red);
+      border-radius: 20px;
+      overflow: hidden;
+      background: var(--white);
+    }
+
+    .search-bar input {
+      flex: 1;
+      border: none;
+      outline: none;
+      padding: 0 16px;
+      font-size: 13px;
+      font-family: inherit;
+      background: transparent;
+    }
+
+    .search-bar button {
+      width: 72px;
+      height: 100%;
+      border: none;
+      background: linear-gradient(135deg, var(--red-soft), var(--red));
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .header-user {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .header-user a {
+      font-size: 13px;
+      color: var(--text-sec);
+      transition: color 0.2s;
+    }
+
+    .header-user a:hover { color: var(--red); }
+
+    .avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--pink), var(--peach));
+      border: 2px solid var(--white);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    /* ===== Hero ===== */
+    .hero-wrap {
+      background: linear-gradient(180deg, #FFF5F7 0%, #FFFAFB 40%, var(--bg) 100%);
+      padding: 24px 0 32px;
+    }
+
+    .hero {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      gap: 16px;
+    }
+
+    /* Carousel */
+    .carousel {
+      flex: 1;
+      position: relative;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      height: 340px;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .carousel-track {
+      display: flex;
+      height: 100%;
+      transition: transform 0.5s ease;
+    }
+
+    .carousel-slide {
+      min-width: 100%;
+      height: 100%;
+      position: relative;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 36px 40px;
+    }
+
+    .slide-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+    }
+
+    .slide-bg--1 { background: linear-gradient(135deg, #FF6B6B 0%, #E84855 40%, #8B0000 100%); }
+    .slide-bg--2 { background: linear-gradient(135deg, #FFB347 0%, #E84855 50%, #C62828 100%); }
+    .slide-bg--3 { background: linear-gradient(135deg, #FF8FAB 0%, #E84855 45%, #6B2737 100%); }
+    .slide-bg--4 { background: linear-gradient(135deg, #FFD166 0%, #E84855 55%, #9B2335 100%); }
+
+    .slide-bg::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 60%);
+    }
+
+    .slide-content {
+      position: relative;
+      z-index: 1;
+      color: white;
+    }
+
+    .slide-tag {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: rgba(255,255,255,0.2);
+      backdrop-filter: blur(4px);
+      margin-bottom: 12px;
+    }
+
+    .slide-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .slide-desc {
+      font-size: 14px;
+      opacity: 0.85;
+      margin-bottom: 16px;
+    }
+
+    .slide-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 24px;
+      background: rgba(255,255,255,0.95);
+      color: var(--red-deep);
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .carousel-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.9);
+      border: none;
+      cursor: pointer;
+      font-size: 18px;
+      color: var(--text);
+      z-index: 2;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+      transition: 0.2s;
+    }
+
+    .carousel-arrow:hover { background: white; transform: translateY(-50%) scale(1.05); }
+    .carousel-arrow--prev { left: 16px; }
+    .carousel-arrow--next { right: 16px; }
+
+    .carousel-dots {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      z-index: 2;
+    }
+
+    .carousel-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.4);
+      border: none;
+      cursor: pointer;
+      transition: 0.3s;
+      padding: 0;
+    }
+
+    .carousel-dot.active {
+      width: 24px;
+      background: white;
+    }
+
+    /* User Panel */
+    .user-panel {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      padding: 32px 24px 24px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .user-avatar {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--pink), var(--peach));
+      margin-bottom: 12px;
+      border: 3px solid var(--red-light);
+    }
+
+    .user-name {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .user-hint {
+      font-size: 12px;
+      color: var(--text-mut);
+      margin-bottom: 24px;
+    }
+
+    .user-panel .btn {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--red-soft), var(--red));
+      color: white;
+      box-shadow: 0 4px 14px rgba(232, 72, 85, 0.35);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(232, 72, 85, 0.4);
+    }
+
+    .btn-outline {
+      background: var(--white);
+      color: var(--red);
+      border: 1.5px solid var(--red);
+    }
+
+    .btn-outline:hover { background: var(--red-light); }
+
+    /* ===== Feature Buttons ===== */
+    .features {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 24px 40px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .feature-card {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 28px 32px;
+      border-radius: var(--radius-lg);
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0.9;
+      z-index: 0;
+    }
+
+    .feature-card--material::before {
+      background: linear-gradient(135deg, #FFE4E8 0%, #FFF0F3 50%, #FFFFFF 100%);
+    }
+
+    .feature-card--workshop::before {
+      background: linear-gradient(135deg, #FFE8D6 0%, #FFF5EB 50%, #FFFFFF 100%);
+    }
+
+    .feature-card:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .feature-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      position: relative;
+      z-index: 1;
+      flex-shrink: 0;
+    }
+
+    .feature-card--material .feature-icon {
+      background: linear-gradient(135deg, var(--red-soft), var(--red));
+    }
+
+    .feature-card--workshop .feature-icon {
+      background: linear-gradient(135deg, #FFB347, #E84855);
+    }
+
+    .feature-text {
+      position: relative;
+      z-index: 1;
+    }
+
+    .feature-text h3 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .feature-text p {
+      font-size: 13px;
+      color: var(--text-sec);
+    }
+
+    .feature-arrow {
+      margin-left: auto;
+      font-size: 20px;
+      color: var(--red);
+      position: relative;
+      z-index: 1;
+      opacity: 0.6;
+    }
+
+    /* ===== Section Common ===== */
+    .section {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 24px 48px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .section-title em {
+      font-style: normal;
+      color: var(--red);
+    }
+
+    .section-more {
+      font-size: 13px;
+      color: var(--text-mut);
+    }
+
+    .section-more:hover { color: var(--red); }
+
+    /* ===== Rankings ===== */
+    .rankings {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .rank-col {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .rank-col-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .rank-col-head h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--red);
+    }
+
+    .rank-col-head span {
+      font-size: 12px;
+      color: var(--text-mut);
+    }
+
+    .rank-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 0;
+      border-bottom: 1px solid #F5F5F5;
+      cursor: pointer;
+      transition: background 0.15s;
+      border-radius: 8px;
+    }
+
+    .rank-item:last-child { border-bottom: none; }
+
+    .rank-item:hover { background: var(--red-light); }
+
+    .rank-num {
+      width: 22px;
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+      flex-shrink: 0;
+      color: var(--text-mut);
+    }
+
+    .rank-num.top { color: var(--red); }
+
+    .rank-thumb {
+      width: 80px;
+      height: 50px;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    .rank-thumb--1 { background: linear-gradient(135deg, #FF6B6B, #C62828); }
+    .rank-thumb--2 { background: linear-gradient(135deg, #FFB347, #E84855); }
+    .rank-thumb--3 { background: linear-gradient(135deg, #FF8FAB, #9B2335); }
+    .rank-thumb--4 { background: linear-gradient(135deg, #FFD166, #E84855); }
+    .rank-thumb--5 { background: linear-gradient(135deg, #C9A0DC, #6B2737); }
+
+    .rank-info h4 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+
+    .rank-info p {
+      font-size: 12px;
+      color: var(--text-mut);
+    }
+
+    /* ===== Library ===== */
+    .library-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .lib-tab {
+      padding: 8px 20px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--white);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      color: var(--text-sec);
+      transition: 0.2s;
+    }
+
+    .lib-tab.active {
+      background: linear-gradient(135deg, var(--red-soft), var(--red));
+      color: white;
+      border-color: transparent;
+    }
+
+    .series-filter {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .series-chip {
+      padding: 6px 16px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: var(--white);
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      color: var(--text-sec);
+      transition: 0.2s;
+    }
+
+    .series-chip.active,
+    .series-chip:hover {
+      background: var(--red-light);
+      border-color: var(--red-soft);
+      color: var(--red);
+    }
+
+    .waterfall {
+      columns: 4;
+      column-gap: 16px;
+    }
+
+    @media (max-width: 1000px) { .waterfall { columns: 3; } }
+    @media (max-width: 700px) { .waterfall { columns: 2; } .hero { flex-direction: column; } .user-panel { width: 100%; } .features { grid-template-columns: 1fr; } .rankings { grid-template-columns: 1fr; } }
+
+    .poster-card {
+      break-inside: avoid;
+      margin-bottom: 16px;
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: var(--shadow);
+    }
+
+    .poster-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .poster-img {
+      width: 100%;
+      display: flex;
+      align-items: flex-end;
+      padding: 16px;
+      position: relative;
+    }
+
+    .poster-img--t { height: 240px; }
+    .poster-img--m { height: 190px; }
+    .poster-img--s { height: 150px; }
+
+    .poster-img span {
+      color: white;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.3;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      position: relative;
+      z-index: 1;
+    }
+
+    .poster-body {
+      padding: 14px 16px 16px;
+    }
+
+    .poster-series {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--red);
+      margin-bottom: 4px;
+    }
+
+    .poster-meta {
+      font-size: 12px;
+      color: var(--text-mut);
+      display: flex;
+      gap: 10px;
+    }
+
+    /* Column view */
+    .columns-view { display: none; flex-direction: column; gap: 36px; }
+    .columns-view.show { display: flex; }
+    .waterfall-view { display: block; }
+    .waterfall-view.hide { display: none; }
+
+    .series-row-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .series-row-head h3 {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .series-scroll {
+      display: flex;
+      gap: 16px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      scrollbar-width: thin;
+    }
+
+    .series-scroll .poster-card {
+      flex: 0 0 220px;
+      margin-bottom: 0;
+    }
+
+    .series-scroll .poster-img--t,
+    .series-scroll .poster-img--m,
+    .series-scroll .poster-img--s { height: 160px; }
+
+    /* Footer */
+    .footer {
+      background: var(--white);
+      border-top: 1px solid var(--border);
+      padding: 32px 24px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-mut);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <a class="logo" href="index.html">
+        <div class="logo-mark">红</div>
+        <span class="logo-name">数智红途</span>
+      </a>
+      <nav class="nav-main">
+        <a href="index.html" class="active">智学课堂</a>
+        <a href="#">星火素材</a>
+        <a href="#">创意工坊</a>
+        <a href="#">我的足迹</a>
+      </nav>
+      <div class="search-bar">
+        <input type="text" placeholder="搜索党课、系列、主讲人…" id="search" />
+        <button type="button">搜索</button>
+      </div>
+      <div class="header-user">
+        <a href="#">个人中心</a>
+        <a href="#">消息</a>
+        <a href="#">帮助</a>
+        <div class="avatar"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero: Carousel + User -->
+  <div class="hero-wrap">
+    <div class="hero">
+      <div class="carousel" id="carousel">
+        <div class="carousel-track" id="carousel-track"></div>
+        <button type="button" class="carousel-arrow carousel-arrow--prev" id="prev">‹</button>
+        <button type="button" class="carousel-arrow carousel-arrow--next" id="next">›</button>
+        <div class="carousel-dots" id="dots"></div>
+      </div>
+      <aside class="user-panel">
+        <div class="user-avatar"></div>
+        <div class="user-name">郑同学</div>
+        <div class="user-hint">最近学习 · 觉醒年代系列</div>
+        <button type="button" class="btn btn-primary" onclick="location.href='classroom.html'">我的课程</button>
+        <button type="button" class="btn btn-outline">我的制作</button>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Feature Buttons -->
+  <div class="features">
+    <a class="feature-card feature-card--material" href="#">
+      <div class="feature-icon">🔥</div>
+      <div class="feature-text">
+        <h3>星火素材</h3>
+        <p>采集上传红色素材卡片，万物皆卡片</p>
+      </div>
+      <span class="feature-arrow">→</span>
+    </a>
+    <a class="feature-card feature-card--workshop" href="#">
+      <div class="feature-icon">⚙️</div>
+      <div class="feature-text">
+        <h3>创意工坊</h3>
+        <p>AI 生成互动党课课件，一键植入游戏</p>
+      </div>
+      <span class="feature-arrow">→</span>
+    </a>
+  </div>
+
+  <!-- Rankings -->
+  <section class="section">
+    <div class="section-head">
+      <h2 class="section-title">课程<em>排行推荐</em></h2>
+      <a class="section-more" href="#">查看全部 →</a>
+    </div>
+    <div class="rankings">
+      <div class="rank-col">
+        <div class="rank-col-head">
+          <h3>最新课程</h3>
+          <span>NEW COURSES</span>
+        </div>
+        <div id="rank-new"></div>
+      </div>
+      <div class="rank-col">
+        <div class="rank-col-head">
+          <h3>最热课程</h3>
+          <span>HOT COURSES</span>
+        </div>
+        <div id="rank-hot"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Library -->
+  <section class="section">
+    <div class="section-head">
+      <h2 class="section-title">精品互动<em>党课库</em></h2>
+    </div>
+    <div class="library-tabs">
+      <button type="button" class="lib-tab active" data-view="waterfall">精品课程</button>
+      <button type="button" class="lib-tab" data-view="columns">专栏系列</button>
+    </div>
+    <div class="series-filter" id="series-filter"></div>
+    <div class="waterfall-view" id="waterfall-view">
+      <div class="waterfall" id="waterfall"></div>
+    </div>
+    <div class="columns-view" id="columns-view">
+      <div id="columns"></div>
+    </div>
+  </section>
+
+  <footer class="footer">© 2026 数智红途 · AI 驱动大思政实践教育平台</footer>
+
+  <script>
+    const courses = [
+      { id: 11, title: '革命年代青年榜样故事', series: '革命年代青年榜样系列', filter: 'youth', h: 't', hot: 92, new: 0, games: 2, grad: 'linear-gradient(135deg,#FF8FAB,#C62828)' },
+      { id: 1, title: '五四运动与新文化启蒙', series: '觉醒年代系列', filter: 'awakening', h: 't', hot: 98, new: 1, grad: 'linear-gradient(135deg,#FF6B6B,#C62828)' },
+      { id: 2, title: '李大钊与马克思主义传播', series: '觉醒年代系列', filter: 'awakening', h: 'm', hot: 85, new: 3, grad: 'linear-gradient(135deg,#FF8FAB,#9B2335)' },
+      { id: 3, title: '陈独秀与新文化运动', series: '觉醒年代系列', filter: 'awakening', h: 's', hot: 72, new: 5, grad: 'linear-gradient(135deg,#FFB347,#E84855)' },
+      { id: 4, title: '遵义会议：生死攸关转折点', series: '长征精神系列', filter: 'longmarch', h: 't', hot: 95, new: 2, grad: 'linear-gradient(135deg,#4A7C23,#2D5016)' },
+      { id: 5, title: '飞夺泸定桥', series: '长征精神系列', filter: 'longmarch', h: 'm', hot: 88, new: 4, grad: 'linear-gradient(135deg,#6B8E23,#3D5C1A)' },
+      { id: 6, title: '爬雪山过草地', series: '长征精神系列', filter: 'longmarch', h: 's', hot: 76, new: 6, grad: 'linear-gradient(135deg,#558B2F,#33691E)' },
+      { id: 7, title: '乡村振兴战略解读', series: '新时代思政系列', filter: 'newera', h: 'm', hot: 80, new: 7, grad: 'linear-gradient(135deg,#FFD166,#E84855)' },
+      { id: 8, title: '文化自信与传承', series: '新时代思政系列', filter: 'newera', h: 't', hot: 74, new: 8, grad: 'linear-gradient(135deg,#C9A0DC,#6B2737)' },
+      { id: 9, title: '井冈山精神永放光芒', series: '红色革命系列', filter: 'revolution', h: 's', hot: 82, new: 9, grad: 'linear-gradient(135deg,#E84855,#8B0000)' },
+      { id: 10, title: '延安精神与党的优良作风', series: '红色革命系列', filter: 'revolution', h: 'm', hot: 90, new: 10, grad: 'linear-gradient(135deg,#FF6B6B,#6B2737)' },
+    ];
+
+    const slides = [
+      { title: '革命年代青年榜样故事', tag: '革命年代青年榜样系列', desc: '全新上线 · 含历史决战生成器 + 红色剧本杀', bg: 'slide-bg--1', id: 11 },
+      { title: '五四运动与新文化启蒙', tag: '觉醒年代系列', desc: '沉浸式互动全景课件 · 含 2 个游戏节点', bg: 'slide-bg--2', id: 1 },
+      { title: '遵义会议：生死攸关的转折点', tag: '长征精神系列', desc: '策略推演 + 历史抉择互动', bg: 'slide-bg--3', id: 4 },
+      { title: '乡村振兴战略解读', tag: '新时代思政系列', desc: 'AI 生成 · 可直接开课授课', bg: 'slide-bg--4', id: 7 },
+    ];
+
+    const seriesMap = {
+      all: '全部',
+      youth: '革命年代青年榜样系列',
+      awakening: '觉醒年代系列',
+      longmarch: '长征精神系列',
+      newera: '新时代思政系列',
+      revolution: '红色革命系列',
+    };
+
+    let slideIdx = 0;
+    let filter = 'all';
+
+    function goCourse(id) {
+      location.href = 'classroom.html?course=' + id;
+    }
+
+    // Carousel
+    const track = document.getElementById('carousel-track');
+    const dotsEl = document.getElementById('dots');
+
+    slides.forEach((s, i) => {
+      const slide = document.createElement('a');
+      slide.className = 'carousel-slide';
+      slide.href = 'classroom.html?course=' + s.id;
+      slide.innerHTML = `
+        <div class="slide-bg ${s.bg}"></div>
+        <div class="slide-content">
+          <span class="slide-tag">${s.tag}</span>
+          <div class="slide-title">${s.title}</div>
+          <div class="slide-desc">${s.desc}</div>
+          <span class="slide-cta">进入课件 →</span>
+        </div>`;
+      track.appendChild(slide);
+
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'carousel-dot' + (i === 0 ? ' active' : '');
+      dot.addEventListener('click', () => goSlide(i));
+      dotsEl.appendChild(dot);
+    });
+
+    function goSlide(i) {
+      slideIdx = i;
+      track.style.transform = `translateX(-${i * 100}%)`;
+      dotsEl.querySelectorAll('.carousel-dot').forEach((d, j) => d.classList.toggle('active', j === i));
+    }
+
+    document.getElementById('prev').onclick = () => goSlide((slideIdx - 1 + slides.length) % slides.length);
+    document.getElementById('next').onclick = () => goSlide((slideIdx + 1) % slides.length);
+    setInterval(() => goSlide((slideIdx + 1) % slides.length), 5000);
+
+    // Rankings
+    function renderRank(containerId, sortKey) {
+      const el = document.getElementById(containerId);
+      const sorted = [...courses].sort((a, b) => sortKey === 'new' ? a.new - b.new : b.hot - a.hot).slice(0, 5);
+      el.innerHTML = sorted.map((c, i) => `
+        <div class="rank-item" onclick="goCourse(${c.id})">
+          <span class="rank-num ${i < 3 ? 'top' : ''}">${i + 1}</span>
+          <div class="rank-thumb rank-thumb--${(i % 5) + 1}"></div>
+          <div class="rank-info">
+            <h4>${c.title}</h4>
+            <p>${c.series} · ${c.hot} 人参与</p>
+          </div>
+        </div>`).join('');
+    }
+
+    renderRank('rank-new', 'new');
+    renderRank('rank-hot', 'hot');
+
+    // Poster card
+    function posterCard(c) {
+      return `<div class="poster-card" onclick="goCourse(${c.id})">
+        <div class="poster-img poster-img--${c.h}" style="background:${c.grad}">
+          <span>${c.title}</span>
+        </div>
+        <div class="poster-body">
+          <div class="poster-series">${c.series}</div>
+          <div class="poster-meta"><span>🎮 ${c.games || 1} 个互动</span><span>${c.hot} 人学习</span></div>
+        </div>
+      </div>`;
+    }
+
+    function renderWaterfall() {
+      const list = filter === 'all' ? courses : courses.filter(c => c.filter === filter);
+      document.getElementById('waterfall').innerHTML = list.map(posterCard).join('');
+    }
+
+    function renderColumns() {
+      const cols = document.getElementById('columns');
+      cols.innerHTML = Object.entries(seriesMap).filter(([k]) => k !== 'all').map(([key, name]) => {
+        const items = courses.filter(c => c.filter === key);
+        if (!items.length) return '';
+        return `<div class="series-block">
+          <div class="series-row-head"><h3>${name}</h3><a class="section-more" href="#">查看全部 →</a></div>
+          <div class="series-scroll">${items.map(posterCard).join('')}</div>
+        </div>`;
+      }).join('');
+    }
+
+    // Filters
+    const filterEl = document.getElementById('series-filter');
+    Object.entries(seriesMap).forEach(([key, label]) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'series-chip' + (key === 'all' ? ' active' : '');
+      chip.textContent = label;
+      chip.onclick = () => {
+        filter = key;
+        filterEl.querySelectorAll('.series-chip').forEach(c => c.classList.toggle('active', c.textContent === label));
+        renderWaterfall();
+      };
+      filterEl.appendChild(chip);
+    });
+
+    // View toggle
+    document.querySelectorAll('.lib-tab').forEach(tab => {
+      tab.onclick = () => {
+        document.querySelectorAll('.lib-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const isCol = tab.dataset.view === 'columns';
+        document.getElementById('waterfall-view').classList.toggle('hide', isCol);
+        document.getElementById('columns-view').classList.toggle('show', isCol);
+        if (isCol) renderColumns();
+      };
+    });
+
+    // Search
+    document.getElementById('search').addEventListener('input', e => {
+      const q = e.target.value.trim().toLowerCase();
+      document.querySelectorAll('.poster-card, .rank-item').forEach(el => {
+        el.style.display = !q || el.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+
+    renderWaterfall();
+  </script>
+</body>
+</html>

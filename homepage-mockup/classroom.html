@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>课件播放 · 数智红途</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --red: #E84855;
+      --red-deep: #C62828;
+      --red-light: #FFF0F3;
+      --bg: #0D0D12;
+      --gold: #FFD166;
+      --white: #FFFFFF;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Noto Sans SC', sans-serif;
+      background: var(--bg);
+      color: var(--white);
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      height: 52px;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      flex-shrink: 0;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .back {
+      background: rgba(255,255,255,0.1);
+      border: none;
+      color: rgba(255,255,255,0.85);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .back:hover { background: rgba(255,255,255,0.18); }
+    .title { font-size: 15px; font-weight: 600; }
+    .btn-teach {
+      background: linear-gradient(135deg, #FF8A8A, var(--red));
+      border: none;
+      color: white;
+      padding: 8px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .body { flex: 1; display: flex; overflow: hidden; }
+    .timeline {
+      width: 200px;
+      background: rgba(255,255,255,0.04);
+      border-right: 1px solid rgba(255,255,255,0.08);
+      overflow-y: auto;
+      padding: 20px 0;
+      flex-shrink: 0;
+    }
+    .timeline-label {
+      font-size: 11px;
+      color: rgba(255,255,255,0.35);
+      padding: 0 16px 12px;
+      letter-spacing: 0.08em;
+    }
+    .tl-node {
+      padding: 10px 16px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.5);
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: 0.2s;
+    }
+    .tl-node:hover { background: rgba(255,255,255,0.05); color: white; }
+    .tl-node.active { color: white; border-left-color: var(--red); background: rgba(232,72,85,0.12); }
+    .tl-node.game { color: var(--gold); }
+    .scroll {
+      flex: 1;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+    .sec {
+      min-height: 70vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 80px;
+    }
+    .sec:nth-child(odd) { background: #0D0D12; }
+    .sec:nth-child(even) { background: #14141C; }
+    .sec.hero {
+      min-height: 85vh;
+      flex-direction: column;
+      text-align: center;
+      background: linear-gradient(180deg, #2D0A0A, #0D0D12);
+    }
+    .sec.hero h1 { font-size: 44px; font-weight: 700; line-height: 1.25; margin-bottom: 16px; }
+    .sec.hero h1 span { color: var(--gold); }
+    .sec.hero p { font-size: 16px; color: rgba(255,255,255,0.6); }
+    .block { max-width: 680px; }
+    .block h2 { font-size: 28px; font-weight: 700; margin-bottom: 16px; }
+    .block p { font-size: 16px; color: rgba(255,255,255,0.75); line-height: 1.9; margin-bottom: 12px; }
+    .quote { border-left: 3px solid var(--gold); padding-left: 16px; font-style: italic; color: var(--gold); font-size: 18px; margin: 20px 0; }
+    .game-card {
+      max-width: 480px;
+      text-align: center;
+      padding: 40px;
+      border: 2px solid rgba(255,209,102,0.35);
+      border-radius: 16px;
+      background: rgba(255,209,102,0.06);
+    }
+    .game-card h3 { font-size: 24px; margin-bottom: 12px; }
+    .game-card p { font-size: 14px; color: rgba(255,255,255,0.65); margin-bottom: 24px; }
+    .game-grid {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 920px;
+    }
+    .game-grid .game-card {
+      flex: 1;
+      min-width: 300px;
+      max-width: 420px;
+    }
+    .game-card--battle { border-color: rgba(232, 72, 85, 0.45); background: rgba(232, 72, 85, 0.08); }
+    .game-card--script { border-color: rgba(255, 143, 171, 0.45); background: rgba(255, 143, 171, 0.08); }
+    .game-card .game-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.1);
+      color: var(--gold);
+      margin-bottom: 12px;
+    }
+    .game-btn {
+      background: var(--gold);
+      color: #1A1A1A;
+      border: none;
+      padding: 14px 32px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .modal.open { display: flex; }
+    .modal-box {
+      background: #1A1A24;
+      border-radius: 16px;
+      max-width: 520px;
+      width: 100%;
+      overflow: hidden;
+      border: 1px solid rgba(255,209,102,0.25);
+    }
+    .modal-head {
+      padding: 18px 24px;
+      background: rgba(255,209,102,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-head h4 { font-size: 16px; color: var(--gold); }
+    .modal-close { background: rgba(255,255,255,0.1); border: none; color: white; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; }
+    .modal-body { padding: 24px; }
+    .scenario { font-size: 14px; line-height: 1.8; color: rgba(255,255,255,0.8); margin-bottom: 16px; padding: 14px; background: rgba(255,255,255,0.04); border-radius: 8px; border-left: 3px solid var(--gold); }
+    .choice {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      color: rgba(255,255,255,0.85);
+      font-size: 14px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .choice:hover { background: rgba(232,72,85,0.2); border-color: var(--red); }
+    .choice.selected { background: rgba(232,72,85,0.25); border-color: var(--red); }
+    .feedback { margin-top: 16px; padding: 14px; border-radius: 8px; font-size: 13px; line-height: 1.7; display: none; background: rgba(34,160,107,0.15); border: 1px solid rgba(34,160,107,0.35); color: #7DDFB3; }
+    .feedback.show { display: block; }
+    .clue-list { margin: 12px 0; padding-left: 0; list-style: none; }
+    .clue-list li { padding: 8px 12px; margin-bottom: 6px; background: rgba(255,255,255,0.05); border-radius: 6px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:16px">
+      <button type="button" class="back" onclick="location.href='index.html'">← 返回首页</button>
+      <span class="title" id="course-title">课件播放</span>
+    </div>
+    <button type="button" class="btn-teach">全屏上课</button>
+  </div>
+  <div class="body">
+    <nav class="timeline" id="timeline"></nav>
+    <div class="scroll" id="scroll">
+      <section class="sec hero" data-i="0">
+        <h1 id="hero-title">五四运动<br><span>与新文化启蒙</span></h1>
+        <p>沉浸式互动全景课件 · 向下滚动展开</p>
+      </section>
+      <section class="sec" data-i="1"><div class="block"><h2>1919 年：一个时代的转折</h2><p>1919 年 5 月 4 日，北京学生三千余人齐聚天安门，高呼「外争主权、内除国贼」，掀起彻底反帝反封建的伟大爱国革命运动。</p><p class="quote">「铁肩担道义，妙手著文章。」—— 李大钊</p></div></section>
+      <section class="sec" data-i="2"><div class="block"><h2>历史影像</h2><p style="opacity:0.5;text-align:center;padding:40px;border:1px dashed rgba(255,255,255,0.2);border-radius:12px">▶ 五四运动纪实（3:24）</p></div></section>
+      <section class="sec" data-i="3"><div class="block"><h2>李大钊：马克思主义先驱</h2><p>李大钊是最早系统传播马克思主义的思想家之一，积极支持学生爱国运动。</p></div></section>
+      <section class="sec" data-i="4"><div class="game-card"><h3>⚔️ 李大钊的历史抉择</h3><p>课件到此节点，触发内置互动游戏。如果你是 1919 年的李大钊，你会如何选择？</p><button type="button" class="game-btn" id="start-game">开始互动</button></div></section>
+      <section class="sec" data-i="5"><div class="block"><h2>本课小结</h2><p>五四运动是中国近代史上具有里程碑意义的伟大事件。</p></div></section>
+    </div>
+  </div>
+  <div class="modal" id="modal">
+    <div class="modal-box">
+      <div class="modal-head"><h4>🎮 历史抉择</h4><button type="button" class="modal-close" id="close-modal">✕</button></div>
+      <div class="modal-body" id="modal-body">
+        <div class="scenario" id="modal-scenario"></div>
+        <div id="modal-choices"></div>
+        <div class="feedback" id="modal-feedback"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const names = {
+      1: '五四运动与新文化启蒙',
+      4: '遵义会议：生死攸关转折点',
+      7: '乡村振兴战略解读',
+      10: '延安精神与党的优良作风',
+      11: '革命年代青年榜样故事',
+    };
+
+    const courseContent = {
+      11: {
+        hero: '革命年代<br><span>青年榜样故事</span>',
+        heroSub: '革命年代青年榜样系列 · 人物故事互动课件',
+        nodes: ['开篇', '榜样群像', '赵世炎事迹', '青年抉择', '⚡双重互动游戏', '小结'],
+        sections: `
+      <section class="sec hero" data-i="0">
+        <h1 id="hero-title">革命年代<br><span>青年榜样故事</span></h1>
+        <p>革命年代青年榜样系列 · 人物故事互动课件</p>
+      </section>
+      <section class="sec" data-i="1"><div class="block"><h2>革命年代的青年群像</h2><p>在中国革命波澜壮阔的历程中，一代代青年以热血与理想投身救国救民的伟大事业。他们中有投身五四运动的先锋，有奔赴延安的知识分子，有在隐蔽战线奋斗的无名英雄。</p><p>本课程通过人物故事，带领学习者走近那些照亮时代的青年榜样。</p></div></section>
+      <section class="sec" data-i="2"><div class="block"><h2>赵世炎：信仰之光的青年</h2><p>赵世炎（1901—1927），四川酉阳人。早年赴法勤工俭学，接受马克思主义，回国后投身工人运动，是中共早期重要领导人之一。1927 年 4 月，他在上海被捕就义，年仅 26 岁。</p><p class="quote">「奋斗、奋斗，奋斗到底！」—— 赵世炎</p></div></section>
+      <section class="sec" data-i="3"><div class="block"><h2>青年的选择与担当</h2><p>面对民族危亡，革命年代的青年面临求学、谋生、革命、归乡等多重选择。他们的每一次抉择，不仅塑造个人命运，也深刻影响着中国革命的历史进程。</p></div></section>
+      <section class="sec" data-i="4">
+        <div class="game-grid">
+          <div class="game-card game-card--battle">
+            <span class="game-tag">互动游戏 ①</span>
+            <h3>⚔️ 历史决战生成器</h3>
+            <p>扮演 1920 年代青年，在关键历史节点做出抉择，系统自动生成不同剧情走向与结局。</p>
+            <button type="button" class="game-btn" data-game="battle">开始决战</button>
+          </div>
+          <div class="game-card game-card--script">
+            <span class="game-tag">互动游戏 ②</span>
+            <h3>🎭 红色剧本杀</h3>
+            <p>《苏区账目风波》· 13 人联机（1 教师 + 12 学生），抽卡、私人线索、投票汇总。</p>
+            <p style="font-size:12px;opacity:0.7;margin-bottom:16px">请先启动服务：script-murder/server → npm start</p>
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+              <button type="button" class="game-btn" onclick="window.open('http://localhost:3001/client/host.html?course=11','_blank')">教师大屏</button>
+              <button type="button" class="game-btn" style="background:#FF8FAB;color:#1A1A1A" onclick="window.open('http://localhost:3001/client/role.html?course=11','_blank')">学生加入</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="sec" data-i="5"><div class="block"><h2>本课小结</h2><p>革命年代的青年榜样，以理想和生命诠释了「青春向党」的深刻内涵。愿当代青年以史为鉴，传承红色基因，担当时代使命。</p></div></section>`,
+        games: {
+          battle: {
+            title: '🎮 历史决战生成器',
+            scenario: '1925 年，你是一名在北平读书的青年。家中来信希望你回乡教书安稳度日，同学邀你南下投身工人运动，导师建议你赴法深造。请做出你的抉择——系统将生成对应历史走向。',
+            choices: [
+              { text: 'A. 投身工人运动，奔赴革命一线', feedback: '【结局生成】你南下上海，参与工人罢工组织工作，后在赵世炎影响下走上革命道路。历史线：成为工人运动骨干。' },
+              { text: 'B. 听从家人，回乡从事教育', feedback: '【结局生成】你回乡办起新式学堂，秘密向学生传播进步思想。历史线：以教育为阵地，培育革命火种。' },
+              { text: 'C. 赴法深造，先积累知识与视野', feedback: '【结局生成】你赴法勤工俭学，接触马克思主义，1923 年回国参与早期党组织建设。历史线：与赵世炎等同走赴法之路。' },
+            ],
+          },
+          script: {
+            title: '🎭 红色剧本杀 · 联络站之谜',
+            scenario: '1927 年 3 月，上海法租界一处秘密联络站。赵世炎同志被捕前夜，站内仍留有关键线索。你们小组需要在限定时间内还原真相。',
+            clues: ['线索①：一份未寄出的法文信，收信人署名「C.Y.T」', '线索②：墙缝中的工人罢工路线图，标注了 3 月 20 日', '线索③：一张被烧毁半边的照片，背面写着「奋斗到底」'],
+            choices: [
+              { text: '推理：联络站负责人生前最后任务是什么？', feedback: '正确！赵世炎在就义前仍安排同志转移文件，并留下「奋斗到底」的嘱托。' },
+              { text: '推理：「C.Y.T」代表谁？', feedback: '正确！C.Y.T 即 CYT / 世炎拼音缩写，指向赵世炎（Cai Yin Tang 旧式拼法）。' },
+              { text: '推理：罢工路线图为何指向 3 月 20 日？', feedback: '正确！3 月 20 日上海工人第四次武装起义，赵世炎是主要组织者之一。' },
+            ],
+          },
+        },
+      },
+    };
+
+    const defaultGame = {
+      title: '🎮 历史抉择',
+      scenario: '1919 年 6 月，北洋政府逮捕大批学生。作为李大钊，你收到校方施压，同时学生请求公开声援……',
+      choices: [
+        { text: 'A. 公开发表文章声援学生', feedback: '正确！李大钊选择了公开发声援学生，以实际行动支持爱国运动。' },
+        { text: 'B. 私下资助但保持低调', feedback: '部分正确。李大钊确实在幕后支持学生，但很快便公开发表文章。' },
+        { text: 'C. 说服学生停止游行', feedback: '不符合历史。李大钊始终积极支持和引导学生的爱国运动。' },
+      ],
+    };
+
+    const id = new URLSearchParams(location.search).get('course') || '1';
+    const title = names[id] || '五四运动与新文化启蒙';
+    document.getElementById('course-title').textContent = title;
+
+    const modal = document.getElementById('modal');
+    const modalTitle = document.querySelector('.modal-head h4');
+    const modalScenario = document.getElementById('modal-scenario');
+    const modalChoices = document.getElementById('modal-choices');
+    const modalFeedback = document.getElementById('modal-feedback');
+
+    function openGame(gameData) {
+      modalTitle.textContent = gameData.title;
+      modalScenario.innerHTML = gameData.scenario;
+      if (gameData.clues) {
+        modalScenario.innerHTML += '<ul class="clue-list">' + gameData.clues.map(c => '<li>' + c + '</li>').join('') + '</ul>';
+      }
+      modalChoices.innerHTML = '';
+      modalFeedback.classList.remove('show');
+      gameData.choices.forEach(ch => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'choice';
+        btn.textContent = ch.text;
+        btn.onclick = () => {
+          modalChoices.querySelectorAll('.choice').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          modalFeedback.textContent = ch.feedback;
+          modalFeedback.classList.add('show');
+        };
+        modalChoices.appendChild(btn);
+      });
+      modal.classList.add('open');
+    }
+
+    const scroll = document.getElementById('scroll');
+    if (courseContent[id]) {
+      const c = courseContent[id];
+      scroll.innerHTML = c.sections;
+      scroll.querySelectorAll('[data-game]').forEach(btn => {
+        btn.onclick = () => openGame(c.games[btn.dataset.game]);
+      });
+      var nodes = c.nodes;
+    } else {
+      document.getElementById('hero-title').innerHTML = title.replace('：', '<br><span>') + (title.includes('：') ? '</span>' : '');
+      var nodes = ['开篇', '1919转折', '历史影像', '李大钊', '⚡互动游戏', '小结'];
+      document.getElementById('start-game').onclick = () => openGame(defaultGame);
+    }
+    const tl = document.getElementById('timeline');
+    tl.innerHTML = '<div class="timeline-label">课件时间线</div>';
+    nodes.forEach((n, i) => {
+      const d = document.createElement('div');
+      d.className = 'tl-node' + (i === 4 ? ' game' : '') + (i === 0 ? ' active' : '');
+      d.textContent = n;
+      d.onclick = () => document.querySelector(`[data-i="${i}"]`).scrollIntoView({ behavior: 'smooth' });
+      tl.appendChild(d);
+    });
+
+    document.getElementById('scroll').addEventListener('scroll', function() {
+      const secs = this.querySelectorAll('[data-i]');
+      let a = 0;
+      secs.forEach((s, i) => { if (s.getBoundingClientRect().top < innerHeight * 0.5) a = i; });
+      tl.querySelectorAll('.tl-node').forEach((n, i) => n.classList.toggle('active', i === a));
+    });
+
+    document.getElementById('close-modal').onclick = () => modal.classList.remove('open');
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+  </script>
+</body>
+</html>

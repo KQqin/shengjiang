@@ -21,7 +21,7 @@
       "path": "pages/history-choice",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "历史抉择生成器",
+        "navigationBarTitleText": "历史抉择",
         "navigationBarBackgroundColor": "#1A0F0A",
         "navigationBarTextStyle": "white"
       }

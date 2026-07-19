@@ -14,6 +14,7 @@ import {
   saveHostSession,
   syncServerBootSession,
 } from '@/utils/script-session'
+import { restoreTeachingFullscreen } from '@/utils/teaching-fullscreen.js'
 
 const courseId = ref('11')
 const scriptData = ref(null)
@@ -389,6 +390,7 @@ onMounted(async () => {
 })
 
 onShow(() => {
+  restoreTeachingFullscreen()
   if (!scriptData.value || connStatus.value === 'error') return
   if (!ws.isConnected()) {
     ws.connect()
@@ -668,6 +670,7 @@ function goDevPreview() {
 
 <style scoped lang="scss">
 .host-page {
+  height: 100vh;
   min-height: 100vh;
   background: #0d0d12;
   color: #fff;

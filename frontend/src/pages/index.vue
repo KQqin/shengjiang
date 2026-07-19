@@ -142,7 +142,7 @@ onUnmounted(() => {
         </view>
         <view class="user-panel">
           <view class="user-avatar" />
-          <view class="user-name">郑同学</view>
+          <view class="user-name">经绘青红</view>
           <view class="user-hint">最近学习 · 觉醒年代系列</view>
           <button type="button" class="btn btn-primary" @click="goCourse(11)">我的课程</button>
           <button type="button" class="btn btn-outline">我的制作</button>

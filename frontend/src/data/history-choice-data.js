@@ -1,6 +1,7 @@
-/** 历史抉择生成器 · 由 server/tools/build_choice_data.py + map_choice_images.py 生成 */
+/** 历史抉择 · 由 server/tools/build_choice_data.py + map_choice_images.py 生成 */
 export const historyChoiceGame = {
-  "title": "历史抉择生成器 · 青春守初心 廉洁担使命",
+  "title": "历史抉择",
+  "subtitle": "青春守初心，廉洁担使命",
   "announcement": "欢迎参与历史抉择体验！你将化身革命先辈与新时代青年，在一次次选择中感悟廉洁品格、青春担当。每道选择都会触发不同结果，请认真思考作答，完成全部抉择即可查看专属结局。",
   "characters": [
     {

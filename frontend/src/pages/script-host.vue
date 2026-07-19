@@ -560,7 +560,7 @@ function goDevPreview() {
     <view class="panel">
       <button class="btn ghost" @click="prevPhase">← 上一环节</button>
       <button class="btn primary" @click="nextPhase">下一环节 →</button>
-      <button class="btn gold" @click="startTimer">{{ timerRunning ? '暂停' : '开始计时' }}</button>
+      <button v-if="phase?.showTimer" class="btn gold" @click="startTimer">{{ timerRunning ? '暂停' : '开始计时' }}</button>
       <button
         v-if="fillableSlots > 0"
         class="btn fill"

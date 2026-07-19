@@ -116,7 +116,7 @@ STATIC = {
             "name": "自我介绍",
             "displayType": "discuss",
             "durationSec": 480,
-            "showTimer": True,
+            "showTimer": False,
             "hostHint": "按 introOrder 顺序线下发言，仅公开人物简介",
         },
         {
@@ -143,7 +143,7 @@ STATIC = {
             "name": "讨论投票",
             "displayType": "vote",
             "durationSec": 480,
-            "showTimer": True,
+            "showTimer": False,
             "hostHint": "学生在手机端填写「事件真相」与「核心元凶」，大屏查看汇总",
         },
         {
@@ -167,9 +167,7 @@ STATIC = {
     "background": (
         "1932年，闽浙赣苏区正处在最艰难的封锁时期。物资总站是苏区物资中转、储备、核算的核心关口，"
         "所有人恪守「账物相符、分毫不差」的铁规。本月月底例行大盘点，多本账本出现涂改，小额粮油、"
-        "粗布账实不符，站内流言四起。上级督查组紧急进驻，限时彻查。\n\n"
-        "重要规则：本场为无凶案、非明凶、全员盲视角思政剧本。无反派、无恶意贪腐、无刻意破坏。"
-        "请积极参与搜证与公聊推理，共同复盘风波根源。"
+        "粗布账实不符，站内流言四起。上级督查组紧急进驻，限时彻查。"
     ),
     "incident": {
         "title": "1932年 · 闽浙赣苏区物资总站",
@@ -483,9 +481,7 @@ def main() -> None:
     raw = EXTRACTED.read_text(encoding="utf-8")
     bg_m = re.search(r"剧本背景【全员公开必读】(.*?)重要玩家规则", raw, re.S)
     if bg_m:
-        STATIC["background"] = bg_m.group(1).strip() + "\n\n" + re.search(
-            r"重要玩家规则：(.*?)角色1", raw, re.S
-        ).group(1).strip()
+        STATIC["background"] = bg_m.group(1).strip()
 
     doc_roles = parse_roles(raw)
     roles = []

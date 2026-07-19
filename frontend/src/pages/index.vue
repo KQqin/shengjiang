@@ -1,6 +1,12 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { courses, slides, seriesMap } from '../data/courses.js'
+import { courses, slides, seriesMap, getCourseCoverPath } from '../data/courses.js'
+import { getSharedUrl } from '../utils/config.js'
+
+function coverUrl(id) {
+  const path = getCourseCoverPath(id)
+  return path ? getSharedUrl(path) : ''
+}
 
 const slideIdx = ref(0)
 const filter = ref('all')
@@ -81,7 +87,7 @@ onUnmounted(() => {
       <view class="header-inner">
         <view class="logo" @click="goCourse(11)">
           <view class="logo-mark">红</view>
-          <text class="logo-name">数智红途</text>
+          <text class="logo-name">首页</text>
         </view>
         <view class="nav-main">
           <text class="nav-link active">智学课堂</text>
@@ -103,7 +109,9 @@ onUnmounted(() => {
           <text class="user-link">个人中心</text>
           <text class="user-link">消息</text>
           <text class="user-link">帮助</text>
-          <view class="avatar" />
+          <view class="avatar">
+            <image class="avatar-flag" src="/static/avatar-red-flag.svg" mode="aspectFill" />
+          </view>
         </view>
       </view>
     </view>
@@ -118,7 +126,14 @@ onUnmounted(() => {
               class="carousel-slide"
               @click="goCourse(s.id)"
             >
-              <view class="slide-bg" :class="s.bg" />
+              <view class="slide-bg">
+                <image
+                  v-if="coverUrl(s.id)"
+                  class="slide-bg-img"
+                  :src="coverUrl(s.id)"
+                  mode="aspectFill"
+                />
+              </view>
               <view class="slide-content">
                 <text class="slide-tag">{{ s.tag }}</text>
                 <view class="slide-title">{{ s.title }}</view>
@@ -141,7 +156,9 @@ onUnmounted(() => {
           </view>
         </view>
         <view class="user-panel">
-          <view class="user-avatar" />
+          <view class="user-avatar">
+            <image class="avatar-flag avatar-flag--lg" src="/static/avatar-red-flag.svg" mode="aspectFill" />
+          </view>
           <view class="user-name">经绘青红</view>
           <view class="user-hint">最近学习 · 觉醒年代系列</view>
           <button type="button" class="btn btn-primary" @click="goCourse(11)">我的课程</button>
@@ -188,7 +205,14 @@ onUnmounted(() => {
             @click="goCourse(c.id)"
           >
             <text class="rank-num" :class="{ top: i < 3 }">{{ i + 1 }}</text>
-            <view class="rank-thumb" :class="'rank-thumb--' + ((i % 5) + 1)" />
+            <view class="rank-thumb">
+              <image
+                v-if="coverUrl(c.id)"
+                class="rank-thumb-img"
+                :src="coverUrl(c.id)"
+                mode="aspectFill"
+              />
+            </view>
             <view class="rank-info">
               <view class="rank-info-title">{{ c.title }}</view>
               <view class="rank-info-meta">{{ c.series }} · {{ c.hot }} 人参与</view>
@@ -208,7 +232,14 @@ onUnmounted(() => {
             @click="goCourse(c.id)"
           >
             <text class="rank-num" :class="{ top: i < 3 }">{{ i + 1 }}</text>
-            <view class="rank-thumb" :class="'rank-thumb--' + ((i % 5) + 1)" />
+            <view class="rank-thumb">
+              <image
+                v-if="coverUrl(c.id)"
+                class="rank-thumb-img"
+                :src="coverUrl(c.id)"
+                mode="aspectFill"
+              />
+            </view>
             <view class="rank-info">
               <view class="rank-info-title">{{ c.title }}</view>
               <view class="rank-info-meta">{{ c.series }} · {{ c.hot }} 人参与</view>
@@ -261,14 +292,16 @@ onUnmounted(() => {
             class="poster-card"
             @click="goCourse(c.id)"
           >
-            <view
-              class="poster-img"
-              :class="'poster-img--' + c.h"
-              :style="{ background: c.grad }"
-            >
-              <view class="poster-title">{{ c.title }}</view>
+            <view class="poster-img">
+              <image
+                v-if="c.cover"
+                class="poster-cover"
+                :src="coverUrl(c.id)"
+                mode="aspectFill"
+              />
             </view>
             <view class="poster-body">
+              <view class="poster-body-title">{{ c.title }}</view>
               <view class="poster-series">{{ c.series }}</view>
               <view class="poster-meta">
                 <text>🎮 {{ c.games || 1 }} 个互动</text>
@@ -301,14 +334,16 @@ onUnmounted(() => {
                   class="poster-card"
                   @click="goCourse(c.id)"
                 >
-                  <view
-                    class="poster-img"
-                    :class="'poster-img--' + c.h"
-                    :style="{ background: c.grad }"
-                  >
-                    <view class="poster-title">{{ c.title }}</view>
+                  <view class="poster-img">
+                    <image
+                      v-if="c.cover"
+                      class="poster-cover"
+                      :src="coverUrl(c.id)"
+                      mode="aspectFill"
+                    />
                   </view>
                   <view class="poster-body">
+                    <view class="poster-body-title">{{ c.title }}</view>
                     <view class="poster-series">{{ c.series }}</view>
                     <view class="poster-meta">
                       <text>🎮 {{ c.games || 1 }} 个互动</text>

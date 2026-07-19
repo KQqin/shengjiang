@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="8" fill="#F2ECE0"/>
+
+  <rect x="16" y="14" width="32" height="36" rx="2" fill="#F0FFF0" stroke="#2D5016" stroke-width="1.5"/>
+  <path d="M22 22h20M22 28h16" stroke="#558B2F" stroke-width="1.2" stroke-linecap="round"/>
+  <rect x="22" y="34" width="20" height="10" rx="1" fill="#E84855" opacity="0.2" stroke="#C62828" stroke-width="1"/>
+  <text x="32" y="41" text-anchor="middle" fill="#2D5016" font-size="7" font-weight="700">回执</text>
+</svg>

@@ -19,7 +19,16 @@ function sharedStaticPlugin() {
         if (!filePath.startsWith(sharedRoot) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
           return next()
         }
-        res.setHeader('Content-Type', filePath.endsWith('.png') ? 'image/png' : 'application/octet-stream')
+        const ext = path.extname(filePath).toLowerCase()
+        const mime =
+          ext === '.png'
+            ? 'image/png'
+            : ext === '.jpg' || ext === '.jpeg'
+              ? 'image/jpeg'
+              : ext === '.webp'
+                ? 'image/webp'
+                : 'application/octet-stream'
+        res.setHeader('Content-Type', mime)
         fs.createReadStream(filePath).pipe(res)
       })
     },

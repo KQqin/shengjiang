@@ -1,15 +1,17 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import * as ws from '@/utils/ws-client'
-import { getSharedUrl } from '@/utils/config'
+import { getHealthUrl, getSharedUrl } from '@/utils/config'
 import { buildPlayerContent, buildAllRoles, formatPublicIntro } from '@/utils/script-content'
+import { getClueIconUrl } from '@/utils/clue-icons'
 import {
   clearPlayerSession,
   formatIdentityCode,
   isRejoinRecoverableError,
   loadPlayerSession,
   savePlayerSession,
+  syncServerBootSession,
 } from '@/utils/script-session'
 
 const courseId = ref('11')
@@ -43,6 +45,8 @@ const expandedRoleIds = ref([])
 const posterLoadFailed = ref(false)
 const playerToken = ref('')
 const pendingRejoin = ref(false)
+const joiningRoom = ref(false)
+let wsHandlersBound = false
 let lastSyncedPhase = -1
 
 const identityCode = computed(() => formatIdentityCode(playerToken.value))
@@ -123,7 +127,8 @@ function mapSharedClue(c, i) {
     content: c.content,
     sharedBy: c.roleName || c.playerName,
     cardNo: `S-${String(i + 1).padStart(2, '0')}`,
-    icon: '📌',
+    icon: getClueIconUrl(c.content) ? '' : '📌',
+    iconUrl: getClueIconUrl(c.content),
     accent: '#6B4423',
   }
 }
@@ -180,20 +185,22 @@ const privateClueList = computed(() => {
     list.push({
       key: 'clue1',
       title: '私人线索 ①',
-      shortTitle: roleReveal.value?.name || '线索',
+      shortTitle: parseClueHeadline(playerContent.value.clue1) || roleReveal.value?.name || '线索',
       content: playerContent.value.clue1,
       cardNo: '#01',
-      icon: '📋',
+      icon: getClueIconUrl(playerContent.value.clue1) ? '' : '📋',
+      iconUrl: getClueIconUrl(playerContent.value.clue1),
     })
   }
   if (u.includes('clue2') && playerContent.value?.clue2) {
     list.push({
       key: 'clue2',
       title: '私人线索 ②',
-      shortTitle: roleReveal.value?.name || '线索',
+      shortTitle: parseClueHeadline(playerContent.value.clue2) || roleReveal.value?.name || '线索',
       content: playerContent.value.clue2,
       cardNo: '#02',
-      icon: '🔍',
+      icon: getClueIconUrl(playerContent.value.clue2) ? '' : '🔍',
+      iconUrl: getClueIconUrl(playerContent.value.clue2),
     })
   }
   return list
@@ -271,6 +278,7 @@ function resetToJoinScreen(message = '教师已结束本局，请重新加入') 
   voteSubmitted.value = false
   voteDraftDirty.value = false
   voteComposing.value = false
+  joiningRoom.value = false
   pendingRejoin.value = false
   expandedRoleIds.value = []
   poolTab.value = 'public'
@@ -324,26 +332,12 @@ function syncVoteFromServer(me) {
   voteSubmitted.value = !!me.hasVoted
 }
 
-onMounted(async () => {
-  try {
-    const res = await uni.request({ url: getSharedUrl('script-data.json') })
-    scriptData.value = res.data
-  } catch {
-    statusLine.value = '剧本数据加载失败'
-  }
-
-  if (isPreview.value) {
-    initPreviewMode()
-    return
-  }
-
-  ws.clearHandlers()
-
-  const saved = loadPlayerSession()
-  if (saved?.roomCode) roomCode.value = saved.roomCode
-  if (saved?.nickname) nickname.value = saved.nickname
+function bindWsHandlers() {
+  if (wsHandlersBound) return
+  wsHandlersBound = true
 
   ws.on('connected', () => {
+    if (joiningRoom.value) return
     const session = loadPlayerSession()
     if (session?.playerToken && session?.roomCode) {
       pendingRejoin.value = true
@@ -356,9 +350,12 @@ onMounted(async () => {
       })
       return
     }
-    statusLine.value = '已连接服务器，请输入房间号'
+    if (!joined.value) {
+      statusLine.value = '已连接服务器，请输入房间号'
+    }
   })
   ws.on('JOINED', (msg) => {
+    joiningRoom.value = false
     joined.value = true
     myPlayerId.value = msg.playerId
     playerToken.value = msg.playerToken || playerToken.value
@@ -440,13 +437,24 @@ onMounted(async () => {
     resetToJoinScreen(text)
   })
   ws.on('disconnected', () => {
-    if (!joined.value) return
-    const session = loadPlayerSession()
-    if (session?.playerToken && session?.roomCode) {
-      pendingRejoin.value = true
+    if (joined.value) {
+      const session = loadPlayerSession()
+      if (session?.playerToken && session?.roomCode) {
+        pendingRejoin.value = true
+      }
+      return
+    }
+    joiningRoom.value = false
+    statusLine.value = '连接断开，正在重试…'
+  })
+  ws.on('error', () => {
+    joiningRoom.value = false
+    if (!joined.value) {
+      statusLine.value = 'WebSocket 连接失败 · 请确认后端已启动（python main.py）'
     }
   })
   ws.on('ERROR', (msg) => {
+    joiningRoom.value = false
     if (pendingRejoin.value) {
       pendingRejoin.value = false
       joined.value = false
@@ -466,11 +474,57 @@ onMounted(async () => {
     }
     statusLine.value = `⚠ ${msg.message}`
   })
+}
 
-  ws.connect()
+async function bootstrapStudentConnection() {
+  try {
+    const health = await uni.request({ url: getHealthUrl(), timeout: 5000 })
+    if (health.statusCode !== 200) throw new Error('health bad')
+  } catch {
+    statusLine.value = '后端未连接 · 请在 shengjiang/server 运行 python main.py（端口 3001）'
+    return false
+  }
+
+  await syncServerBootSession(getHealthUrl)
+  ws.clearHandlers()
+  wsHandlersBound = false
+  bindWsHandlers()
+
+  const saved = loadPlayerSession()
+  if (saved?.roomCode) roomCode.value = saved.roomCode
+  if (saved?.nickname) nickname.value = saved.nickname
+
+  if (!ws.isConnected()) {
+    ws.connect()
+  }
+  return true
+}
+
+onMounted(async () => {
+  try {
+    const res = await uni.request({ url: getSharedUrl('script-data.json') })
+    scriptData.value = res.data
+  } catch {
+    statusLine.value = '剧本数据加载失败'
+  }
+
+  if (isPreview.value) {
+    initPreviewMode()
+    return
+  }
+
+  await bootstrapStudentConnection()
+})
+
+onShow(() => {
+  if (isPreview.value || joined.value) return
+  if (!ws.isConnected()) {
+    ws.connect()
+  }
 })
 
 onUnmounted(() => {
+  wsHandlersBound = false
   ws.clearHandlers()
   ws.disconnect()
 })
@@ -483,6 +537,16 @@ function joinRoom() {
     return
   }
   nickname.value = name
+  pendingRejoin.value = false
+  clearPlayerSession()
+  joiningRoom.value = true
+
+  if (!ws.isConnected()) {
+    statusLine.value = '正在连接服务器…'
+    ws.connect()
+  } else {
+    statusLine.value = '正在加入房间…'
+  }
   ws.send('JOIN_ROOM', { roomCode: code, nickname: name })
 }
 
@@ -633,7 +697,9 @@ function isMe(player) {
       <view class="join-form">
         <input v-model="roomCode" class="input" placeholder="输入 6 位房间号" maxlength="6" />
         <input v-model="nickname" class="input" placeholder="你的昵称" maxlength="12" />
-        <button type="button" class="btn primary" @click="joinRoom">加入房间</button>
+        <button type="button" class="btn primary" :disabled="joiningRoom" @click="joinRoom">
+          {{ joiningRoom ? '正在加入…' : '加入房间' }}
+        </button>
         <text class="join-status">{{ statusLine }}</text>
       </view>
     </view>
@@ -735,7 +801,13 @@ function isMe(player) {
                         <text class="game-clue-head-txt">{{ card.shortTitle }}</text>
                       </view>
                       <view class="game-clue-pic">
-                        <text class="game-clue-pic-icon">{{ card.icon }}</text>
+                        <image
+                          v-if="card.iconUrl"
+                          class="game-clue-pic-img"
+                          :src="card.iconUrl"
+                          mode="aspectFit"
+                        />
+                        <text v-else class="game-clue-pic-icon">{{ card.icon }}</text>
                       </view>
                       <text class="game-clue-desc">{{ card.content }}</text>
                       <view class="game-clue-meta">
@@ -768,7 +840,13 @@ function isMe(player) {
                         <text class="game-clue-head-txt">{{ clue.shortTitle }}</text>
                       </view>
                       <view class="game-clue-pic">
-                        <text class="game-clue-pic-icon">{{ clue.icon }}</text>
+                        <image
+                          v-if="clue.iconUrl"
+                          class="game-clue-pic-img"
+                          :src="clue.iconUrl"
+                          mode="aspectFit"
+                        />
+                        <text v-else class="game-clue-pic-icon">{{ clue.icon }}</text>
                       </view>
                       <text class="game-clue-desc">{{ clue.content }}</text>
                       <view class="game-clue-meta">
@@ -875,7 +953,13 @@ function isMe(player) {
             <text class="game-clue-head-txt">{{ focusedClue.shortTitle || focusedClue.title }}</text>
           </view>
           <view class="game-clue-pic">
-            <text class="game-clue-pic-icon">{{ focusedClue.icon }}</text>
+            <image
+              v-if="focusedClue.iconUrl"
+              class="game-clue-pic-img game-clue-pic-img--focus"
+              :src="focusedClue.iconUrl"
+              mode="aspectFit"
+            />
+            <text v-else class="game-clue-pic-icon">{{ focusedClue.icon }}</text>
           </view>
           <scroll-view scroll-y class="clue-focus-scroll">
             <text class="game-clue-desc">{{ focusedClue.content }}</text>
@@ -1703,6 +1787,11 @@ function isMe(player) {
     font-size: 28rpx;
   }
 
+  .game-clue-pic-img {
+    width: 44rpx;
+    height: 44rpx;
+  }
+
   .game-clue-desc {
     font-size: 12rpx;
     line-height: 1.45;
@@ -1736,6 +1825,11 @@ function isMe(player) {
 
   .game-clue-pic-icon {
     font-size: 72rpx;
+  }
+
+  .game-clue-pic-img {
+    width: 120rpx;
+    height: 120rpx;
   }
 
   .game-clue-desc {
@@ -1850,6 +1944,17 @@ function isMe(player) {
 .game-clue-pic-icon {
   font-size: 44rpx;
   opacity: 0.75;
+}
+
+.game-clue-pic-img {
+  width: 72rpx;
+  height: 72rpx;
+  display: block;
+}
+
+.game-clue-pic-img--focus {
+  width: 120rpx;
+  height: 120rpx;
 }
 
 .game-clue-desc {
